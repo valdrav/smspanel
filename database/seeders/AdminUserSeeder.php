@@ -9,7 +9,7 @@ use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
 
 /**
- * Varsayılan yönetici kullanıcısını oluşturur.
+ * Varsayılan yönetici kullanıcılarını oluşturur.
  */
 class AdminUserSeeder extends Seeder
 {
@@ -18,23 +18,36 @@ class AdminUserSeeder extends Seeder
      */
     public function run(): void
     {
-        $admin = User::firstOrCreate(
-            ['email' => 'admin@smspanel.local'],
+        $admins = [
             [
+                'email' => 'admin@allwhite.com.tr',
                 'name' => 'Süper Yönetici',
+                'password' => 'Allwhite123!',
+                'phone' => '5550000001',
+            ],
+            [
+                'email' => 'admin@smspanel.local',
+                'name' => 'Süper Yönetici',
+                'password' => 'Admin123!',
                 'phone' => '5550000000',
-                'password' => Hash::make('Admin123!'),
-                'status' => UserStatus::Active->value,
-                'sms_balance' => 10000.0000,
-                'sms_sender_id' => 'SMSPANEL',
-                'email_verified_at' => now(),
-            ]
-        );
+            ],
+        ];
 
-        if ((float) $admin->sms_balance <= 0) {
-            $admin->update(['sms_balance' => 10000.0000]);
+        foreach ($admins as $data) {
+            $admin = User::updateOrCreate(
+                ['email' => $data['email']],
+                [
+                    'name' => $data['name'],
+                    'phone' => $data['phone'],
+                    'password' => Hash::make($data['password']),
+                    'status' => UserStatus::Active->value,
+                    'sms_balance' => 10000.0000,
+                    'sms_sender_id' => 'SMSPANEL',
+                    'email_verified_at' => now(),
+                ]
+            );
+
+            $admin->syncRoles([RoleName::SuperAdmin->value]);
         }
-
-        $admin->syncRoles([RoleName::SuperAdmin->value]);
     }
 }

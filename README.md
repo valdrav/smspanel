@@ -44,7 +44,8 @@ php artisan queue:work --queue=sms --tries=3
 
 | Rol | E-posta | Şifre |
 |-----|---------|-------|
-| Süper Yönetici | admin@smspanel.local | Admin123! |
+| Süper Yönetici | admin@allwhite.com.tr | Allwhite123! |
+| Süper Yönetici (dev) | admin@smspanel.local | Admin123! |
 | Müşteri | musteri@smspanel.local | Musteri123! |
 
 Production ortamında seed sonrası bu şifreleri mutlaka değiştirin.
@@ -85,7 +86,7 @@ Bu makinede Git yüklü değilse [Git for Windows](https://git-scm.com/download/
 
 ```bash
 cd d:\laragon\www\smspanel
-
+vv
 git init
 git add .
 git commit -m "Initial commit: SMS Panel Laravel 12"
