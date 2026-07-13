@@ -23,8 +23,8 @@
     <div class="row pkg-catalog-grid">
         @forelse ($packages as $package)
             <div class="col-lg-4 col-md-6 mb-4">
-                <div class="pkg-card {{ $package->themeClass() }} {{ $package->is_featured ? 'is-featured' : '' }}">
-                    @if($package->badge || $package->is_featured)
+                <div class="pkg-card {{ $package->themeClass() }} {{ $package->isFeaturedSafe() ? 'is-featured' : '' }}">
+                    @if($package->badge || $package->isFeaturedSafe())
                         <div class="pkg-badge">
                             {{ $package->badge ?: 'Önerilen' }}
                         </div>

@@ -2,8 +2,10 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Schema;
 
 class SmsPackage extends Model
 {
@@ -23,7 +25,6 @@ class SmsPackage extends Model
         return [
             'sms_amount' => 'integer',
             'price' => 'decimal:2',
-            'features' => 'array',
             'is_active' => 'boolean',
             'is_public' => 'boolean',
             'is_featured' => 'boolean',
@@ -37,6 +38,55 @@ class SmsPackage extends Model
     public function orders(): HasMany
     {
         return $this->hasMany(PackageOrder::class);
+    }
+
+    /**
+     * JSON özellik listesi — bozuk kayıtta sayfa patlamasın.
+     *
+     * @return Attribute<list<string>, list<string>|string|null>
+     */
+    protected function features(): Attribute
+    {
+        return Attribute::make(
+            get: function (mixed $value): array {
+                if ($value === null || $value === '') {
+                    return [];
+                }
+
+                if (is_array($value)) {
+                    return $value;
+                }
+
+                if (! is_string($value)) {
+                    return [];
+                }
+
+                $decoded = json_decode($value, true);
+
+                return is_array($decoded) ? $decoded : [];
+            },
+            set: function (mixed $value): ?string {
+                if ($value === null || $value === '') {
+                    return null;
+                }
+
+                if (is_string($value)) {
+                    $lines = preg_split('/\r\n|\r|\n/', $value) ?: [];
+                    $value = array_values(array_filter(array_map('trim', $lines)));
+                }
+
+                if (! is_array($value)) {
+                    return null;
+                }
+
+                $clean = array_values(array_filter(array_map(
+                    static fn ($item) => is_string($item) ? trim($item) : '',
+                    $value
+                )));
+
+                return $clean === [] ? null : json_encode($clean, JSON_UNESCAPED_UNICODE);
+            },
+        );
     }
 
     /**
@@ -58,21 +108,41 @@ class SmsPackage extends Model
 
     public function pricePerSms(): ?float
     {
-        if ($this->price === null || $this->sms_amount <= 0) {
+        if ($this->price === null || (int) $this->sms_amount <= 0) {
             return null;
         }
 
-        return round((float) $this->price / $this->sms_amount, 4);
+        return round((float) $this->price / (int) $this->sms_amount, 4);
     }
 
     public function themeClass(): string
     {
-        return match ($this->theme) {
+        return match ($this->theme ?: 'indigo') {
             'emerald' => 'pkg-theme-emerald',
             'cyan' => 'pkg-theme-cyan',
             'amber' => 'pkg-theme-amber',
             'rose' => 'pkg-theme-rose',
             default => 'pkg-theme-indigo',
         };
+    }
+
+    public function isFeaturedSafe(): bool
+    {
+        if (! $this->hasPackageEnhancements()) {
+            return false;
+        }
+
+        return (bool) $this->is_featured;
+    }
+
+    public static function hasPackageEnhancements(): bool
+    {
+        static $cached = null;
+
+        if ($cached === null) {
+            $cached = Schema::hasColumn('sms_packages', 'is_featured');
+        }
+
+        return $cached;
     }
 }

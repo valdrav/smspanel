@@ -54,7 +54,7 @@
                             @if($package->badge)
                                 <span class="badge badge-primary">{{ $package->badge }}</span>
                             @endif
-                            @if($package->is_featured)
+                            @if($package->isFeaturedSafe())
                                 <span class="badge badge-warning">Öne çıkan</span>
                             @endif
                         </div>
