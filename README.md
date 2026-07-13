@@ -46,7 +46,10 @@ php artisan queue:work --queue=sms --tries=3
 |-----|---------|-------|
 | Süper Yönetici | admin@allwhite.com.tr | Allwhite123! |
 | Süper Yönetici (dev) | admin@smspanel.local | Admin123! |
+| Yönetici | yonetici@smspanel.local | Yonetici123! |
 | Müşteri | musteri@smspanel.local | Musteri123! |
+
+Örnek paketler, rehber kişileri ve SMS şablonları `php artisan db:seed` ile yüklenir.
 
 Production ortamında seed sonrası bu şifreleri mutlaka değiştirin.
 

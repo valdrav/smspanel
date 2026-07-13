@@ -18,6 +18,8 @@ class DatabaseSeeder extends Seeder
             AdminUserSeeder::class,
             OrganizationSeeder::class,
             UserSenderNumberSeeder::class,
+            SmsPackageSeeder::class,
+            DemoDataSeeder::class,
         ]);
     }
 }
