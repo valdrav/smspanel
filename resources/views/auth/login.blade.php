@@ -1,5 +1,9 @@
 @extends('adminlte::auth.auth-page', ['authType' => 'login'])
 
+@section('adminlte_css_pre')
+    <link rel="stylesheet" href="{{ asset('css/smspanel-theme.css') }}">
+@stop
+
 @section('auth_header')
     SMS Panel Giriş
 @stop
@@ -42,7 +46,7 @@
             @enderror
         </div>
 
-        <div class="row">
+        <div class="row align-items-center">
             <div class="col-7">
                 <div class="icheck-primary">
                     <input type="checkbox" name="remember" id="remember" value="1" {{ old('remember') ? 'checked' : '' }}>
