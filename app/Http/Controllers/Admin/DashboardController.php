@@ -34,8 +34,16 @@ class DashboardController extends Controller
             ->limit(5)
             ->get();
 
+        $hour = (int) now()->format('H');
+        $greeting = match (true) {
+            $hour < 12 => 'Günaydın',
+            $hour < 18 => 'İyi günler',
+            default => 'İyi akşamlar',
+        };
+
         return view('admin.dashboard.index', [
             'pageTitle' => 'Kontrol Paneli',
+            'greeting' => $greeting,
             'stats' => $stats,
             'recentMessages' => $recentMessages,
         ]);
