@@ -7,6 +7,7 @@ use App\Http\Requests\Package\PurchasePackageRequest;
 use App\Models\SmsPackage;
 use App\Services\SmsPackage\PackageOrderService;
 use App\Services\SmsPackage\SmsPackageService;
+use App\Services\Contracts\WalletServiceInterface;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\View\View;
 
@@ -15,17 +16,21 @@ class PackageCatalogController extends Controller
     public function __construct(
         private readonly SmsPackageService $smsPackageService,
         private readonly PackageOrderService $packageOrderService,
+        private readonly WalletServiceInterface $walletService,
     ) {}
 
     public function index(): View
     {
         $this->authorize('browseCatalog', SmsPackage::class);
 
+        $user = auth()->user();
+
         return view('admin.packages.catalog', [
             'pageTitle' => 'SMS Paketleri',
             'packages' => $this->smsPackageService->listPublic(),
-            'myOrders' => auth()->user()->can('packages.purchase')
-                ? $this->packageOrderService->listForUser(auth()->user(), 5)
+            'balance' => $this->walletService->getAvailableBalance($user),
+            'myOrders' => $user->can('packages.purchase')
+                ? $this->packageOrderService->listForUser($user, 8)
                 : null,
         ]);
     }

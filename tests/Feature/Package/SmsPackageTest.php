@@ -24,15 +24,26 @@ class SmsPackageTest extends TestCase
 
         $response = $this->actingAs($superAdmin)->post(route('admin.packages.store'), [
             'name' => 'Başlangıç Paketi',
+            'description' => 'Küçük işletmeler için',
+            'badge' => 'Popüler',
+            'features' => "Anında yükleme\nDestek hattı",
+            'theme' => 'emerald',
             'sms_amount' => 1000,
             'price' => 99.90,
             'is_active' => '1',
             'is_public' => '1',
+            'is_featured' => '1',
             'sort_order' => 10,
         ]);
 
         $response->assertRedirect(route('admin.packages.index'));
-        $this->assertDatabaseHas('sms_packages', ['name' => 'Başlangıç Paketi', 'is_public' => true]);
+        $this->assertDatabaseHas('sms_packages', [
+            'name' => 'Başlangıç Paketi',
+            'is_public' => true,
+            'is_featured' => true,
+            'theme' => 'emerald',
+            'badge' => 'Popüler',
+        ]);
     }
 
     public function test_customer_can_view_catalog_and_request_purchase(): void
@@ -106,5 +117,35 @@ class SmsPackageTest extends TestCase
 
         $this->actingAs($customer)->get(route('admin.packages.index'))->assertStatus(403);
         $this->actingAs($customer)->get(route('admin.packages.catalog'))->assertStatus(200);
+    }
+
+    public function test_admin_can_purchase_but_cannot_manage_packages(): void
+    {
+        $this->seed(RoleAndPermissionSeeder::class);
+
+        $package = SmsPackage::create([
+            'name' => 'Admin Paket',
+            'slug' => 'admin-paket',
+            'sms_amount' => 750,
+            'is_active' => true,
+            'is_public' => true,
+            'sort_order' => 1,
+        ]);
+
+        $admin = User::factory()->create(['status' => UserStatus::Active->value]);
+        $admin->assignRole(RoleName::Admin->value);
+
+        $this->actingAs($admin)->get(route('admin.packages.index'))->assertForbidden();
+        $this->actingAs($admin)->get(route('admin.packages.catalog'))->assertOk()->assertSee('Admin Paket');
+
+        $this->actingAs($admin)->post(route('admin.packages.purchase', $package), [
+            'user_note' => 'Admin talep',
+        ])->assertRedirect();
+
+        $this->assertDatabaseHas('package_orders', [
+            'user_id' => $admin->id,
+            'sms_package_id' => $package->id,
+            'status' => PackageOrderStatus::Pending->value,
+        ]);
     }
 }

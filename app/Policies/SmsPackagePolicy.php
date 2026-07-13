@@ -4,12 +4,13 @@ namespace App\Policies;
 
 use App\Models\SmsPackage;
 use App\Models\User;
+use App\Support\UserScope;
 
 class SmsPackagePolicy
 {
     public function viewAny(User $user): bool
     {
-        return $user->can('packages.manage');
+        return UserScope::isPlatformAdmin($user);
     }
 
     public function browseCatalog(User $user): bool
@@ -19,7 +20,7 @@ class SmsPackagePolicy
 
     public function view(User $user, SmsPackage $package): bool
     {
-        if ($user->can('packages.manage')) {
+        if (UserScope::isPlatformAdmin($user)) {
             return true;
         }
 
@@ -28,16 +29,16 @@ class SmsPackagePolicy
 
     public function create(User $user): bool
     {
-        return $user->can('packages.manage');
+        return UserScope::isPlatformAdmin($user);
     }
 
     public function update(User $user, SmsPackage $package): bool
     {
-        return $user->can('packages.manage');
+        return UserScope::isPlatformAdmin($user);
     }
 
     public function delete(User $user, SmsPackage $package): bool
     {
-        return $user->can('packages.manage');
+        return UserScope::isPlatformAdmin($user);
     }
 }

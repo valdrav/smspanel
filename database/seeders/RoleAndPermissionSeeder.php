@@ -46,6 +46,7 @@ class RoleAndPermissionSeeder extends Seeder
             'tickets.view', 'tickets.create',
             'contacts.view', 'contacts.manage', 'campaigns.view', 'campaigns.create',
             'templates.view', 'templates.manage',
+            'packages.view', 'packages.purchase',
         ]);
 
         $customer->syncPermissions([
