@@ -9,6 +9,7 @@ use App\Enums\ActivityAction;
 use App\Exceptions\BusinessException;
 use App\Models\User;
 use App\Models\UserSenderNumber;
+use App\Repositories\Contracts\SmsProviderRepositoryInterface;
 use App\Repositories\Contracts\UserSenderNumberRepositoryInterface;
 use App\Services\Contracts\ActivityLogServiceInterface;
 use App\Services\Contracts\UserSenderNumberServiceInterface;
@@ -21,6 +22,7 @@ class UserSenderNumberService implements UserSenderNumberServiceInterface
 {
     public function __construct(
         private readonly UserSenderNumberRepositoryInterface $userSenderNumberRepository,
+        private readonly SmsProviderRepositoryInterface $smsProviderRepository,
         private readonly ActivityLogServiceInterface $activityLogService,
     ) {}
 
@@ -119,7 +121,23 @@ class UserSenderNumberService implements UserSenderNumberServiceInterface
         return $requestedSenderId
             ?? $user->organization?->sms_sender_id
             ?? $user->sms_sender_id
+            ?? $this->defaultProviderSenderId()
             ?? config('sms.default_sender_id');
+    }
+
+    private function defaultProviderSenderId(): ?string
+    {
+        $provider = $this->smsProviderRepository->findDefaultActive();
+        $config = $provider?->config ?? [];
+
+        foreach (['sender_id', 'msgheader', 'sender'] as $key) {
+            $sender = trim((string) ($config[$key] ?? ''));
+            if ($sender !== '') {
+                return $sender;
+            }
+        }
+
+        return null;
     }
 
     private function logAction(ActivityAction $action, UserSenderNumber $senderNumber, string $description): void

@@ -164,6 +164,14 @@ class EasySendSmsProvider extends AbstractSmsProvider
     private function sendChunk(array $requests, string $senderId, string $message): array
     {
         $calculator = new SmsSegmentCalculator;
+
+        if ($calculator->calculateSegments($message) > 5) {
+            return array_map(
+                fn () => $this->failure('EasySendSMS: Mesaj en fazla 5 SMS segmenti olabilir.'),
+                $requests,
+            );
+        }
+
         $numbers = array_map(
             fn (SmsSendRequest $request) => $this->internationalNumber($request->to),
             $requests

@@ -3,12 +3,16 @@
 namespace Tests\Feature\Sms;
 
 use App\Enums\RoleName;
+use App\Enums\SmsProviderDriver;
 use App\Enums\SmsMessageStatus;
 use App\Enums\UserStatus;
 use App\Models\SmsMessage;
+use App\Models\SmsProvider;
 use App\Models\User;
 use Database\Seeders\RoleAndPermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\Request;
+use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 /**
@@ -94,5 +98,52 @@ class SmsSendTest extends TestCase
 
         $response->assertRedirect(route('admin.sms.history.index'));
         $this->assertDatabaseCount('sms_messages', 2);
+    }
+
+    public function test_easysendsms_bulk_uses_settings_sender_and_batches_thirty_recipients(): void
+    {
+        SmsProvider::create([
+            'code' => 'easysendsms',
+            'name' => 'EasySendSMS',
+            'driver' => SmsProviderDriver::EasySendSms,
+            'config' => [
+                'api_key' => 'settings-api-key',
+                'sender_id' => 'INOVAPP',
+                'base_url' => 'https://restapi.easysendsms.app/v1/rest',
+            ],
+            'is_active' => true,
+            'is_default' => true,
+            'priority' => 1,
+        ]);
+
+        Http::fake(function (Request $request) {
+            $recipientCount = count(explode(',', (string) $request['to']));
+
+            return Http::response([
+                'status' => 'OK',
+                'messageIds' => array_map(
+                    fn (int $index) => 'OK: message-'.$index,
+                    range(1, $recipientCount),
+                ),
+            ]);
+        });
+
+        $recipients = array_map(
+            fn (int $index) => '555'.str_pad((string) $index, 7, '0', STR_PAD_LEFT),
+            range(1, 60),
+        );
+
+        $response = $this->actingAs($this->user)->post(route('admin.sms.send.bulk'), [
+            'recipients' => implode("\n", $recipients),
+            'message' => 'Toplu gönderim',
+        ]);
+
+        $response->assertRedirect(route('admin.sms.history.index'));
+        $this->assertDatabaseCount('sms_messages', 60);
+        $this->assertCount(2, Http::recorded());
+
+        Http::assertSent(fn (Request $request): bool => $request->hasHeader('apikey', 'settings-api-key')
+            && $request['from'] === 'INOVAPP'
+            && count(explode(',', (string) $request['to'])) === 30);
     }
 }

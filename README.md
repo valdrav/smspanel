@@ -112,29 +112,26 @@ gh repo create smspanel --private --source=. --remote=origin --push
 |----------|----------|
 | `SMS_DEFAULT_PROVIDER` | `mock`, `netgsm`, `iletimerkezi`, `easysendsms` |
 | `SMS_QUEUE` | Kuyruk adı (varsayılan: `sms`) |
+| `SMS_BATCH_SIZE` | Manuel toplu gönderim limiti (varsayılan: `1000`) |
 | `SMS_CAMPAIGN_MAX_RECIPIENTS` | Kampanya max alıcı (200000) |
 | `QUEUE_CONNECTION` | `database` (Plesk'te önerilir) |
 
 ### EasySendSMS
 
-EasySendSMS REST API kullanmak için production `.env`:
-
-```env
-SMS_DEFAULT_PROVIDER=easysendsms
-EASYSENDSMS_API_KEY=API_ANAHTARINIZ
-EASYSENDSMS_SENDER_ID=ONAYLI_BASLIK
-```
-
-Ardından:
+Önce hazır sağlayıcı kaydını oluşturun:
 
 ```bash
-php artisan config:clear
 php artisan db:seed --class=SmsProviderSeeder --force
-php artisan config:cache
 ```
 
-Alternatif olarak Süper Yönetici → SMS Sağlayıcıları ekranındaki hazır
-EasySendSMS kaydını düzenleyip API anahtarı ve onaylı gönderici başlığını girin.
+Ardından Süper Yönetici → **SMS API Ayarları** ekranında EasySendSMS kaydını
+düzenleyin. API anahtarı ile onaylı gönderici başlığını girin ve sağlayıcıyı
+**Aktif + Varsayılan** yapın. Anahtar şifreli saklanır.
+
+Manuel toplu gönderimde 1000, kampanyalarda 200.000 alıcı desteklenir.
+EasySendSMS'e her API isteğinde en fazla 30 benzersiz numara gönderilir; kalan
+alıcılar kuyruk işleriyle otomatik parçalanır. Production'da `sms` queue worker
+sürekli çalışmalıdır.
 
 ## Lisans
 

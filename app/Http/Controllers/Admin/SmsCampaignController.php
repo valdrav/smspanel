@@ -47,9 +47,7 @@ class SmsCampaignController extends Controller
         $senderNumbers = $this->userSenderNumberService->getActiveForUser($user);
         $defaultSender = $senderNumbers->firstWhere('is_default', true)?->sender_id
             ?? $senderNumbers->first()?->sender_id
-            ?? $user->organization?->sms_sender_id
-            ?? $user->sms_sender_id
-            ?? config('sms.default_sender_id');
+            ?? $this->userSenderNumberService->resolveSenderId($user, null);
 
         return view('admin.campaigns.create', [
             'pageTitle' => 'Yeni Kampanya',

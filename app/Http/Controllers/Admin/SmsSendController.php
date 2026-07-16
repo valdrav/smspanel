@@ -40,9 +40,7 @@ class SmsSendController extends Controller
         $senderNumbers = $this->userSenderNumberService->getActiveForUser($user);
         $defaultSender = $senderNumbers->firstWhere('is_default', true)?->sender_id
             ?? $senderNumbers->first()?->sender_id
-            ?? $user->organization?->sms_sender_id
-            ?? $user->sms_sender_id
-            ?? config('sms.default_sender_id');
+            ?? $this->userSenderNumberService->resolveSenderId($user, null);
 
         return view('admin.sms.send', [
             'pageTitle' => 'SMS Gönder',
@@ -50,7 +48,7 @@ class SmsSendController extends Controller
             'defaultSenderId' => $defaultSender,
             'senderNumbers' => $senderNumbers,
             'hasAssignedSenders' => $senderNumbers->isNotEmpty(),
-            'maxBatchSize' => (int) config('sms.batch_size', 100),
+            'maxBatchSize' => (int) config('sms.batch_size', 1000),
             'contacts' => $this->contactService->getActiveForUser($user),
             'templates' => $this->smsTemplateService->activeForUser($user),
         ]);

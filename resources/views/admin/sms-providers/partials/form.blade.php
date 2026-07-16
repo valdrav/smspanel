@@ -77,7 +77,8 @@
         <div class="col-md-4">
             <div class="form-group">
                 <label>API Key</label>
-                <input type="text" name="config[api_key]" class="form-control" value="{{ old('config.api_key', $provider->config['api_key'] ?? '') }}">
+                <input type="text" name="config[api_key]" class="form-control"
+                    value="{{ old('config.api_key', isset($provider) && $provider->driver->value === 'iletimerkezi' ? ($provider->config['api_key'] ?? '') : '') }}">
             </div>
         </div>
         <div class="col-md-4">
@@ -110,9 +111,10 @@
             <div class="form-group">
                 <label>API Key <span class="text-danger">*</span></label>
                 <input type="password" name="config[api_key]" class="form-control"
-                    value="{{ old('config.api_key', $provider->config['api_key'] ?? '') }}"
+                    value="{{ old('config.api_key', '') }}"
+                    placeholder="{{ isset($provider) && !empty($provider->config['api_key']) ? 'Kayıtlı anahtarı değiştirmek için yeni değer girin' : 'REST API anahtarını girin' }}"
                     autocomplete="new-password">
-                <small class="text-muted">Şifreli olarak veritabanında saklanır.</small>
+                <small class="text-muted">Veritabanında şifreli saklanır ve düzenleme ekranında tekrar gösterilmez.</small>
             </div>
         </div>
         <div class="col-md-3">
@@ -136,6 +138,8 @@
             <li>Türkiye numaraları API'ye otomatik <strong>90XXXXXXXXXX</strong> olarak gider (<code>+</code> / <code>00</code> kullanılmaz).</li>
             <li>Türkçe/Unicode mesajlarda <code>type=1</code>, düz metinde <code>type=0</code> otomatik seçilir.</li>
             <li>Tek istekte en fazla <strong>30 alıcı</strong>; daha fazlası otomatik parçalanır.</li>
+            <li>Toplu gönderimler kuyrukta yüzlerce alıcıya ölçeklenir; her API isteği en fazla 30 benzersiz numara içerir.</li>
+            <li>Mesaj uzunluğu EasySendSMS kuralına göre en fazla <strong>5 segment</strong> olabilir.</li>
             <li>Alfanumerik gönderici max <strong>11</strong>, sayısal max <strong>15</strong> karakter.</li>
             <li>API anahtarı panelde <em>Account Settings → REST API</em> altındadır. IP kısıtı varsa sunucu IP’nizi whitelist’e ekleyin.</li>
         </ul>

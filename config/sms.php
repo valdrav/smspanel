@@ -53,7 +53,7 @@ return [
 
     'queue' => env('SMS_QUEUE', 'sms'),
 
-    'batch_size' => (int) env('SMS_BATCH_SIZE', 100),
+    'batch_size' => (int) env('SMS_BATCH_SIZE', 1000),
 
     'campaign' => [
         'max_recipients' => (int) env('SMS_CAMPAIGN_MAX_RECIPIENTS', 200000),

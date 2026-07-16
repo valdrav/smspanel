@@ -43,9 +43,19 @@ class StoreSmsProviderRequest extends FormRequest
             ],
             SmsProviderDriver::EasySendSms->value => [
                 'config.api_key' => ['required', 'string', 'max:500'],
-                'config.sender_id' => ['required', 'string', 'max:15'],
+                'config.sender_id' => [
+                    'required',
+                    'string',
+                    'max:15',
+                    function (string $attribute, mixed $value, \Closure $fail): void {
+                        $sender = (string) $value;
+                        if (! ctype_digit(ltrim($sender, '+')) && mb_strlen($sender) > 11) {
+                            $fail('Alfanumerik EasySendSMS gönderici başlığı en fazla 11 karakter olabilir.');
+                        }
+                    },
+                ],
                 'config.base_url' => ['nullable', 'url', 'max:255'],
-            ], // alfanumerik max 11 / sayısal max 15 (sağlayıcıda da doğrulanır)
+            ],
             default => [],
         };
     }

@@ -367,7 +367,7 @@ return [
             'can' => 'sender-numbers.view',
         ],
         [
-            'text' => 'SMS Sağlayıcıları',
+            'text' => 'SMS API Ayarları',
             'route' => 'admin.sms-providers.index',
             'icon' => 'fas fa-fw fa-server',
             'can' => 'providers.view',

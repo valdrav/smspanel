@@ -5,9 +5,10 @@ namespace App\Services\Sms;
 use App\Enums\CampaignRecipientStatus;
 use App\Enums\CampaignStatus;
 use App\Enums\SmsMessageStatus;
+use App\Enums\SmsProviderDriver;
 use App\Exceptions\BusinessException;
 use App\Jobs\Sms\ProcessCampaignChunkJob;
-use App\Jobs\Sms\SendSmsJob;
+use App\Jobs\Sms\SendSmsBatchJob;
 use App\Models\SmsCampaign;
 use App\Models\SmsCampaignRecipient;
 use App\Models\User;
@@ -73,6 +74,14 @@ class CampaignService
         }
 
         $segments = $this->segmentCalculator->calculateSegments($data['message']);
+        $provider = $this->smsProviderRepository->findDefaultActive();
+        $usesEasySendSms = $provider?->driver === SmsProviderDriver::EasySendSms
+            || ($provider === null && config('sms.default_provider') === SmsProviderDriver::EasySendSms->value);
+
+        if ($usesEasySendSms && $segments > 5) {
+            throw new BusinessException('EasySendSMS mesajları en fazla 5 SMS segmenti olabilir.');
+        }
+
         $totalCredits = $segments * $contacts->count();
 
         if ((float) $this->walletService->getAvailableBalance($user) < $totalCredits) {
@@ -165,11 +174,11 @@ class CampaignService
         $user = $this->userRepository->findByIdOrFail($campaign->user_id);
         $segments = $this->segmentCalculator->calculateSegments($campaign->message);
         $providerCode = $this->smsProviderRepository->findDefaultActive()?->code ?? config('sms.default_provider', 'mock');
-        $delayIndex = 0;
+        $queuedMessageIds = [];
 
         foreach ($recipients as $recipient) {
             try {
-                DB::transaction(function () use ($user, $campaign, $recipient, $segments, $providerCode, &$delayIndex): void {
+                $queuedMessageIds[] = DB::transaction(function () use ($user, $campaign, $recipient, $segments, $providerCode): int {
                     $lockedUser = $this->userRepository->findByIdOrFail($user->id);
 
                     if ((float) $this->walletService->getAvailableBalance($lockedUser) < $segments) {
@@ -195,15 +204,12 @@ class CampaignService
                         'cost' => $segments,
                     ]);
 
-                    SendSmsJob::dispatch($smsMessage->id)
-                        ->delay(now()->addSeconds($delayIndex));
-
                     $recipient->update([
                         'status' => CampaignRecipientStatus::Queued,
                         'sms_message_id' => $smsMessage->id,
                     ]);
 
-                    $delayIndex++;
+                    return $smsMessage->id;
                 });
 
                 $campaign->increment('success_count');
@@ -216,6 +222,11 @@ class CampaignService
             }
 
             $campaign->increment('processed_count');
+        }
+
+        foreach (array_chunk($queuedMessageIds, SendSmsBatchJob::MAX_MESSAGES) as $chunkIndex => $messageIds) {
+            SendSmsBatchJob::dispatch($messageIds)
+                ->delay(now()->addSeconds(intdiv($chunkIndex, 25)));
         }
 
         $campaign->refresh();

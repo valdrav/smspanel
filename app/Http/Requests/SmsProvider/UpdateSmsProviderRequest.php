@@ -45,8 +45,23 @@ class UpdateSmsProviderRequest extends FormRequest
                 'config.sender' => ['nullable', 'string', 'max:11'],
             ],
             SmsProviderDriver::EasySendSms->value => [
-                'config.api_key' => ['required', 'string', 'max:500'],
-                'config.sender_id' => ['required', 'string', 'max:15'],
+                'config.api_key' => [
+                    Rule::requiredIf(fn (): bool => empty($this->route('sms_provider')?->config['api_key'])),
+                    'nullable',
+                    'string',
+                    'max:500',
+                ],
+                'config.sender_id' => [
+                    'required',
+                    'string',
+                    'max:15',
+                    function (string $attribute, mixed $value, \Closure $fail): void {
+                        $sender = (string) $value;
+                        if (! ctype_digit(ltrim($sender, '+')) && mb_strlen($sender) > 11) {
+                            $fail('Alfanumerik EasySendSMS gönderici başlığı en fazla 11 karakter olabilir.');
+                        }
+                    },
+                ],
                 'config.base_url' => ['nullable', 'url', 'max:255'],
             ],
             default => [],

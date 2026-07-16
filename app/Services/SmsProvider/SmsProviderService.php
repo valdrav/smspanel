@@ -50,7 +50,7 @@ class SmsProviderService implements SmsProviderServiceInterface
                 'name' => $data->name,
                 'driver' => $data->driver->value,
                 'config' => $data->config,
-                'is_active' => $data->isActive,
+                'is_active' => $data->isDefault ? true : $data->isActive,
                 'is_default' => $data->isDefault,
                 'priority' => $data->priority,
             ]);
@@ -68,11 +68,20 @@ class SmsProviderService implements SmsProviderServiceInterface
                 $this->smsProviderRepository->clearDefaultFlag();
             }
 
+            $config = $data->config;
+            if (
+                $data->driver->value === 'easysendsms'
+                && trim((string) ($config['api_key'] ?? '')) === ''
+                && ! empty($provider->config['api_key'])
+            ) {
+                $config['api_key'] = $provider->config['api_key'];
+            }
+
             $updated = $this->smsProviderRepository->update($provider, [
                 'name' => $data->name,
                 'driver' => $data->driver->value,
-                'config' => $data->config,
-                'is_active' => $data->isActive,
+                'config' => $config,
+                'is_active' => $data->isDefault ? true : $data->isActive,
                 'is_default' => $data->isDefault,
                 'priority' => $data->priority,
             ]);

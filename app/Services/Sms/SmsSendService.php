@@ -6,10 +6,12 @@ use App\DTOs\ActivityLog\CreateActivityLogData;
 use App\DTOs\Sms\SendBulkSmsData;
 use App\DTOs\Sms\SendSmsData;
 use App\Enums\ActivityAction;
+use App\Enums\SmsProviderDriver;
 use App\Enums\SmsMessageStatus;
 use App\Events\Sms\SmsBulkQueued;
 use App\Events\Sms\SmsMessageQueued;
 use App\Exceptions\BusinessException;
+use App\Jobs\Sms\SendSmsBatchJob;
 use App\Jobs\Sms\SendSmsJob;
 use App\Models\SmsMessage;
 use App\Models\User;
@@ -48,6 +50,7 @@ class SmsSendService implements SmsSendServiceInterface
      */
     public function send(User $user, SendSmsData $data): SmsMessage
     {
+        $this->ensureProviderMessageLength($data->message);
         $recipient = $this->phoneNormalizer->normalize($data->recipient);
 
         if (! $this->phoneNormalizer->isValidTurkishMobile($recipient)) {
@@ -67,26 +70,34 @@ class SmsSendService implements SmsSendServiceInterface
      */
     public function sendBulk(User $user, SendBulkSmsData $data): Collection
     {
+        $this->ensureProviderMessageLength($data->message);
+
         if ($data->recipients === []) {
             throw new BusinessException('En az bir telefon numarası giriniz.');
         }
 
-        if (count($data->recipients) > config('sms.batch_size', 100)) {
-            throw new BusinessException('Tek seferde en fazla '.config('sms.batch_size', 100).' numaraya SMS gönderilebilir.');
+        $recipients = [];
+        foreach ($data->recipients as $recipientLine) {
+            $recipient = $this->phoneNormalizer->normalize($recipientLine);
+
+            if (! $this->phoneNormalizer->isValidTurkishMobile($recipient)) {
+                throw new BusinessException("Geçersiz telefon numarası: {$recipientLine}");
+            }
+
+            $recipients[$recipient] = $recipient;
+        }
+        $recipients = array_values($recipients);
+
+        if (count($recipients) > config('sms.batch_size', 1000)) {
+            throw new BusinessException('Tek seferde en fazla '.config('sms.batch_size', 1000).' benzersiz numaraya SMS gönderilebilir.');
         }
 
         $batchId = (string) Str::uuid();
         $messages = collect();
         $senderId = $this->userSenderNumberService->resolveSenderId($user, $data->senderId);
 
-        DB::transaction(function () use ($user, $data, $batchId, $senderId, &$messages): void {
-            foreach ($data->recipients as $recipientLine) {
-                $recipient = $this->phoneNormalizer->normalize($recipientLine);
-
-                if (! $this->phoneNormalizer->isValidTurkishMobile($recipient)) {
-                    throw new BusinessException("Geçersiz telefon numarası: {$recipientLine}");
-                }
-
+        DB::transaction(function () use ($user, $data, $recipients, $batchId, $senderId, &$messages): void {
+            foreach ($recipients as $recipient) {
                 $messages->push($this->createAndQueueMessage(
                     user: $user,
                     recipient: $recipient,
@@ -98,8 +109,9 @@ class SmsSendService implements SmsSendServiceInterface
             }
         });
 
-        foreach ($messages as $message) {
-            SendSmsJob::dispatch($message->id);
+        foreach ($messages->pluck('id')->chunk(SendSmsBatchJob::MAX_MESSAGES) as $chunkIndex => $messageIds) {
+            SendSmsBatchJob::dispatch($messageIds->values()->all())
+                ->delay(now()->addSeconds(intdiv((int) $chunkIndex, 25)));
         }
 
         $this->activityLogService->record(new CreateActivityLogData(
@@ -186,5 +198,16 @@ class SmsSendService implements SmsSendServiceInterface
         $provider = $this->smsProviderRepository->findDefaultActive();
 
         return $provider?->code ?? config('sms.default_provider', 'mock');
+    }
+
+    private function ensureProviderMessageLength(string $message): void
+    {
+        $provider = $this->smsProviderRepository->findDefaultActive();
+        $usesEasySendSms = $provider?->driver === SmsProviderDriver::EasySendSms
+            || ($provider === null && config('sms.default_provider') === SmsProviderDriver::EasySendSms->value);
+
+        if ($usesEasySendSms && $this->segmentCalculator->calculateSegments($message) > 5) {
+            throw new BusinessException('EasySendSMS mesajları en fazla 5 SMS segmenti olabilir.');
+        }
     }
 }

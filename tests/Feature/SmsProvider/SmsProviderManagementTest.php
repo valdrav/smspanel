@@ -59,4 +59,43 @@ class SmsProviderManagementTest extends TestCase
 
         $this->assertSame('mock', $provider->getName());
     }
+
+    public function test_easysendsms_api_key_is_not_rendered_and_blank_update_preserves_it(): void
+    {
+        $provider = SmsProvider::create([
+            'code' => 'easysendsms',
+            'name' => 'EasySendSMS',
+            'driver' => 'easysendsms',
+            'config' => [
+                'api_key' => 'very-secret-key',
+                'sender_id' => 'INOVAPP',
+                'base_url' => 'https://restapi.easysendsms.app/v1/rest',
+            ],
+            'is_active' => true,
+            'is_default' => true,
+            'priority' => 1,
+        ]);
+
+        $this->actingAs($this->admin)
+            ->get(route('admin.sms-providers.edit', $provider))
+            ->assertOk()
+            ->assertDontSee('very-secret-key');
+
+        $this->actingAs($this->admin)->put(route('admin.sms-providers.update', $provider), [
+            'name' => 'EasySendSMS',
+            'driver' => 'easysendsms',
+            'config' => [
+                'api_key' => '',
+                'sender_id' => 'NEWSENDER',
+                'base_url' => 'https://restapi.easysendsms.app/v1/rest',
+            ],
+            'is_active' => true,
+            'is_default' => true,
+            'priority' => 1,
+        ])->assertRedirect(route('admin.sms-providers.index'));
+
+        $provider->refresh();
+        $this->assertSame('very-secret-key', $provider->config['api_key']);
+        $this->assertSame('NEWSENDER', $provider->config['sender_id']);
+    }
 }

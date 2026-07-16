@@ -12,6 +12,11 @@
 
 @section('content')
     @include('admin.partials.alerts')
+    <div class="alert alert-info">
+        <strong>SMS API yapılandırması:</strong> EasySendSMS kaydını düzenleyip API anahtarı ile onaylı
+        gönderici başlığını girin; ardından kaydı <strong>Aktif</strong> ve <strong>Varsayılan</strong>
+        yapın. “Bakiye Sorgula” işlemi SMS göndermez ve deneme hakkınızı tüketmez.
+    </div>
     <div class="card">
         <div class="card-body table-responsive p-0">
             <table class="table table-hover">
@@ -39,7 +44,7 @@
                                     <a href="{{ route('admin.sms-providers.edit', $provider) }}" class="btn btn-xs btn-warning"><i class="fas fa-edit"></i></a>
                                 @endcan
                                 <form action="{{ route('admin.sms-providers.test-balance', $provider) }}" method="POST" class="d-inline">@csrf
-                                    <button type="submit" class="btn btn-xs btn-info" title="Bakiye Sorgula"><i class="fas fa-sync"></i></button>
+                                    <button type="submit" class="btn btn-xs btn-info" title="Bağlantıyı ve bakiyeyi test et (SMS göndermez)"><i class="fas fa-sync"></i></button>
                                 </form>
                                 @can('delete', $provider)
                                     <form action="{{ route('admin.sms-providers.destroy', $provider) }}" method="POST" class="d-inline" onsubmit="return confirm('Silmek istediğinize emin misiniz?')">@csrf @method('DELETE')
