@@ -10,6 +10,7 @@ enum SmsProviderDriver: string
     case Mock = 'mock';
     case Netgsm = 'netgsm';
     case IletiMerkezi = 'iletimerkezi';
+    case EasySendSms = 'easysendsms';
 
     /**
      * Sürücünün Türkçe etiketini döndürür.
@@ -20,6 +21,7 @@ enum SmsProviderDriver: string
             self::Mock => 'Mock (Test)',
             self::Netgsm => 'Netgsm',
             self::IletiMerkezi => 'İleti Merkezi',
+            self::EasySendSms => 'EasySendSMS',
         };
     }
 }

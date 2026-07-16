@@ -6,6 +6,7 @@ use App\Enums\SmsProviderDriver;
 use App\Models\SmsProvider;
 use App\Repositories\Contracts\SmsProviderRepositoryInterface;
 use App\Sms\Contracts\SmsProviderInterface;
+use App\Sms\Providers\EasySendSmsProvider;
 use App\Sms\Providers\MockSmsProvider;
 use App\Sms\Providers\NetgsmSmsProvider;
 use InvalidArgumentException;
@@ -26,6 +27,7 @@ class SmsProviderFactory
         $this->drivers = config('sms.drivers', [
             SmsProviderDriver::Mock->value => MockSmsProvider::class,
             SmsProviderDriver::Netgsm->value => NetgsmSmsProvider::class,
+            SmsProviderDriver::EasySendSms->value => EasySendSmsProvider::class,
         ]);
     }
 

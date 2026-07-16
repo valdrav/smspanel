@@ -41,6 +41,11 @@ class StoreSmsProviderRequest extends FormRequest
                 'config.secret' => ['required', 'string', 'max:100'],
                 'config.sender' => ['nullable', 'string', 'max:11'],
             ],
+            SmsProviderDriver::EasySendSms->value => [
+                'config.api_key' => ['required', 'string', 'max:500'],
+                'config.sender_id' => ['required', 'string', 'max:15'],
+                'config.base_url' => ['nullable', 'url', 'max:255'],
+            ], // alfanumerik max 11 / sayısal max 15 (sağlayıcıda da doğrulanır)
             default => [],
         };
     }

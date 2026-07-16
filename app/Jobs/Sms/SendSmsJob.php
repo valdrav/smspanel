@@ -62,10 +62,9 @@ class SendSmsJob implements ShouldQueue
         DB::transaction(function () use ($smsMessage, $result, $smsMessageRepository, $userRepository, $walletService): void {
             if ($result->success) {
                 $smsMessageRepository->update($smsMessage, [
-                    'status' => SmsMessageStatus::Delivered->value,
+                    'status' => SmsMessageStatus::Sent->value,
                     'provider_message_id' => $result->messageId,
                     'sent_at' => now(),
-                    'delivered_at' => now(),
                 ]);
 
                 return;

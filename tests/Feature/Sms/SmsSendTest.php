@@ -61,7 +61,7 @@ class SmsSendTest extends TestCase
         $this->assertDatabaseHas('sms_messages', [
             'user_id' => $this->user->id,
             'recipient' => '5551234567',
-            'status' => SmsMessageStatus::Delivered->value,
+            'status' => SmsMessageStatus::Sent->value,
         ]);
     }
 

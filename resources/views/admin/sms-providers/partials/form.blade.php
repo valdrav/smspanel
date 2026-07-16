@@ -95,6 +95,53 @@
     </div>
 </div>
 
+<div id="config-easysendsms" class="driver-config border rounded p-3 mb-3">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h5 class="mb-1">EasySendSMS REST API</h5>
+            <small class="text-muted">API anahtarını EasySendSMS panelindeki Account Settings → REST API bölümünden alın.</small>
+        </div>
+        <a href="https://www.easysendsms.com/rest-api" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary">
+            <i class="fas fa-external-link-alt"></i> Dokümantasyon
+        </a>
+    </div>
+    <div class="row">
+        <div class="col-md-5">
+            <div class="form-group">
+                <label>API Key <span class="text-danger">*</span></label>
+                <input type="password" name="config[api_key]" class="form-control"
+                    value="{{ old('config.api_key', $provider->config['api_key'] ?? '') }}"
+                    autocomplete="new-password">
+                <small class="text-muted">Şifreli olarak veritabanında saklanır.</small>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="form-group">
+                <label>Gönderici Başlığı <span class="text-danger">*</span></label>
+                <input type="text" name="config[sender_id]" class="form-control"
+                    value="{{ old('config.sender_id', $provider->config['sender_id'] ?? config('sms.easysendsms.sender_id')) }}"
+                    maxlength="15" placeholder="SMSPANEL">
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="form-group">
+                <label>REST API Base URL</label>
+                <input type="url" name="config[base_url]" class="form-control"
+                    value="{{ old('config.base_url', $provider->config['base_url'] ?? config('sms.easysendsms.base_url')) }}">
+            </div>
+        </div>
+    </div>
+    <div class="alert alert-info mb-0 py-2">
+        <ul class="mb-0 pl-3">
+            <li>Türkiye numaraları API'ye otomatik <strong>90XXXXXXXXXX</strong> olarak gider (<code>+</code> / <code>00</code> kullanılmaz).</li>
+            <li>Türkçe/Unicode mesajlarda <code>type=1</code>, düz metinde <code>type=0</code> otomatik seçilir.</li>
+            <li>Tek istekte en fazla <strong>30 alıcı</strong>; daha fazlası otomatik parçalanır.</li>
+            <li>Alfanumerik gönderici max <strong>11</strong>, sayısal max <strong>15</strong> karakter.</li>
+            <li>API anahtarı panelde <em>Account Settings → REST API</em> altındadır. IP kısıtı varsa sunucu IP’nizi whitelist’e ekleyin.</li>
+        </ul>
+    </div>
+</div>
+
 <div id="config-mock" class="driver-config border rounded p-3 mb-3">
     <p class="text-muted mb-0">Mock sağlayıcı ek yapılandırma gerektirmez.</p>
 </div>

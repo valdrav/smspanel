@@ -17,9 +17,29 @@ return [
         'mock' => \App\Sms\Providers\MockSmsProvider::class,
         'netgsm' => \App\Sms\Providers\NetgsmSmsProvider::class,
         'iletimerkezi' => \App\Sms\Providers\IletiMerkeziSmsProvider::class,
+        'easysendsms' => \App\Sms\Providers\EasySendSmsProvider::class,
     ],
 
     'default_sender_id' => env('SMS_DEFAULT_SENDER_ID', 'SMSPANEL'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | EasySendSMS REST API v1
+    |--------------------------------------------------------------------------
+    |
+    | @see https://www.easysendsms.com/rest-api
+    | Base host: https://restapi.easysendsms.app
+    | Send:  POST /v1/rest/sms/send   (header: apikey)
+    | Balance: GET /v1/rest/sms/balance (header: APIKEY)
+    | Max 30 recipients per send request.
+    |
+    */
+
+    'easysendsms' => [
+        'api_key' => env('EASYSENDSMS_API_KEY'),
+        'sender_id' => env('EASYSENDSMS_SENDER_ID', env('SMS_DEFAULT_SENDER_ID', 'SMSPANEL')),
+        'base_url' => env('EASYSENDSMS_BASE_URL', 'https://restapi.easysendsms.app/v1/rest'),
+    ],
 
     /*
     |--------------------------------------------------------------------------
