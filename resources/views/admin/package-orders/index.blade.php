@@ -5,6 +5,54 @@
 
 @section('content')
     @include('admin.partials.alerts')
+
+    @if($canManage)
+        <div class="card card-outline card-primary mb-3">
+            <div class="card-header"><h3 class="card-title">Paket Dağıt (SMS hakkı yükle)</h3></div>
+            <form action="{{ route('admin.package-orders.distribute') }}" method="POST">
+                @csrf
+                <div class="card-body">
+                    <p class="text-muted mb-3">
+                        Müşteriye veya yöneticiye paket seçerek SMS hakkı yükleyin.
+                        Kullanıcının organizasyonu varsa hak organizasyon bakiyesine eklenir; yoksa kişisel bakiyeye yazılır.
+                        Gönderimde bu haklar düşer; EasySendSMS sağlayıcı kredisi ayrıdır.
+                    </p>
+                    <div class="form-row">
+                        <div class="col-md-4 mb-2">
+                            <label>Kullanıcı</label>
+                            <select name="user_id" class="form-control" required>
+                                <option value="">Seçin</option>
+                                @foreach ($users as $u)
+                                    <option value="{{ $u->id }}">{{ $u->name }} ({{ $u->email }})</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="col-md-4 mb-2">
+                            <label>Paket</label>
+                            <select name="sms_package_id" class="form-control" required>
+                                <option value="">Seçin</option>
+                                @foreach ($packages as $package)
+                                    <option value="{{ $package->id }}">
+                                        {{ $package->name }} — {{ number_format($package->sms_amount, 0, ',', '.') }} SMS
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="col-md-4 mb-2">
+                            <label>Not (opsiyonel)</label>
+                            <input type="text" name="admin_note" class="form-control" maxlength="500" placeholder="Örn. Nisan yüklemesi">
+                        </div>
+                    </div>
+                </div>
+                <div class="card-footer">
+                    <button type="submit" class="btn btn-primary" onclick="return confirm('Seçilen paketi kullanıcıya dağıtmak istiyor musunuz?')">
+                        <i class="fas fa-share"></i> Paketi Dağıt
+                    </button>
+                </div>
+            </form>
+        </div>
+    @endif
+
     <div class="card">
         <div class="card-header">
             <form method="GET" class="form-row">

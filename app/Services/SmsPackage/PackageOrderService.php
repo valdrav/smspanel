@@ -108,4 +108,34 @@ class PackageOrderService
 
         return $order->fresh(['user', 'smsPackage']);
     }
+
+    /**
+     * Paketi doğrudan kullanıcıya dağıtır (talep beklemeden onaylı yükleme).
+     */
+    public function distribute(User $target, SmsPackage $package, User $processor, ?string $adminNote = null): PackageOrder
+    {
+        if (! $package->is_active) {
+            throw new BusinessException('Pasif paket dağıtılamaz.');
+        }
+
+        return DB::transaction(function () use ($target, $package, $processor, $adminNote): PackageOrder {
+            $order = PackageOrder::create([
+                'user_id' => $target->id,
+                'sms_package_id' => $package->id,
+                'status' => PackageOrderStatus::Approved,
+                'admin_note' => $adminNote ?: 'Yönetici tarafından paket dağıtımı',
+                'processed_by' => $processor->id,
+                'processed_at' => now(),
+            ]);
+
+            $this->walletService->creditAvailableBalance(
+                $this->userRepository->findByIdOrFail($target->id),
+                (float) $package->sms_amount,
+                "Paket dağıtımı: {$package->name}",
+                $order,
+            );
+
+            return $order->fresh(['user', 'smsPackage']);
+        });
+    }
 }

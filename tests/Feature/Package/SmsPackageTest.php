@@ -108,6 +108,40 @@ class SmsPackageTest extends TestCase
         $this->assertEquals(PackageOrderStatus::Approved, $order->fresh()->status);
     }
 
+    public function test_super_admin_can_distribute_package_to_user(): void
+    {
+        $this->seed(RoleAndPermissionSeeder::class);
+
+        $package = SmsPackage::create([
+            'name' => 'Bayi',
+            'slug' => 'bayi',
+            'sms_amount' => 750,
+            'is_active' => true,
+            'is_public' => true,
+            'sort_order' => 1,
+        ]);
+
+        $customer = User::factory()->create(['status' => UserStatus::Active->value, 'sms_balance' => 50]);
+        $customer->assignRole(RoleName::Customer->value);
+
+        $superAdmin = User::factory()->create(['status' => UserStatus::Active->value]);
+        $superAdmin->assignRole(RoleName::SuperAdmin->value);
+
+        $response = $this->actingAs($superAdmin)->post(route('admin.package-orders.distribute'), [
+            'user_id' => $customer->id,
+            'sms_package_id' => $package->id,
+            'admin_note' => 'Bayi yüklemesi',
+        ]);
+
+        $response->assertRedirect();
+        $this->assertEquals(800, (float) $customer->fresh()->sms_balance);
+        $this->assertDatabaseHas('package_orders', [
+            'user_id' => $customer->id,
+            'sms_package_id' => $package->id,
+            'status' => PackageOrderStatus::Approved->value,
+        ]);
+    }
+
     public function test_customer_cannot_access_package_management(): void
     {
         $this->seed(RoleAndPermissionSeeder::class);

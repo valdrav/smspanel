@@ -34,6 +34,7 @@ Route::resource('packages', SmsPackageController::class)->except(['show']);
 Route::get('paketler', [PackageCatalogController::class, 'index'])->name('packages.catalog');
 Route::post('paketler/{package}/satin-al', [PackageCatalogController::class, 'purchase'])->name('packages.purchase');
 Route::get('paket-siparisleri', [PackageOrderController::class, 'index'])->name('package-orders.index');
+Route::post('paket-siparisleri/dagit', [PackageOrderController::class, 'distribute'])->name('package-orders.distribute');
 Route::post('paket-siparisleri/{order}/onayla', [PackageOrderController::class, 'approve'])->name('package-orders.approve');
 Route::post('paket-siparisleri/{order}/reddet', [PackageOrderController::class, 'reject'])->name('package-orders.reject');
 

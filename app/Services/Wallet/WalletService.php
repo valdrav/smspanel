@@ -37,13 +37,15 @@ class WalletService implements WalletServiceInterface
      */
     public function getAvailableBalance(User $user): float
     {
-        if ($user->organization_id !== null) {
-            $organization = $this->organizationRepository->findById($user->organization_id);
+        $lockedUser = $this->userRepository->findByIdOrFail($user->id);
+
+        if ($lockedUser->organization_id !== null) {
+            $organization = $this->organizationRepository->findById($lockedUser->organization_id);
 
             return $organization ? (float) $organization->sms_balance : 0;
         }
 
-        return (float) $user->sms_balance;
+        return (float) $lockedUser->sms_balance;
     }
 
     /**
@@ -51,7 +53,9 @@ class WalletService implements WalletServiceInterface
      */
     public function getPersonalBalance(User $user): float
     {
-        return (float) $user->sms_balance;
+        $lockedUser = $this->userRepository->findByIdOrFail($user->id);
+
+        return (float) $lockedUser->sms_balance;
     }
 
     /**

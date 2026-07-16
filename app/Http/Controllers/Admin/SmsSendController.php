@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\DTOs\Sms\SendBulkSmsData;
 use App\DTOs\Sms\SendSmsData;
+use App\Enums\SmsMessageStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Sms\SendBulkSmsRequest;
 use App\Http\Requests\Sms\SendSmsRequest;
@@ -18,6 +19,7 @@ use App\Sms\Support\SmsSegmentCalculator;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\View\View;
 
 class SmsSendController extends Controller
@@ -42,9 +44,12 @@ class SmsSendController extends Controller
             ?? $senderNumbers->first()?->sender_id
             ?? $this->userSenderNumberService->resolveSenderId($user, null);
 
+        $balance = $this->walletService->getAvailableBalance($user);
+
         return view('admin.sms.send', [
             'pageTitle' => 'SMS Gönder',
-            'balance' => $this->walletService->getAvailableBalance($user),
+            'balance' => $balance,
+            'balanceSource' => $user->organization_id ? 'organization' : 'personal',
             'defaultSenderId' => $defaultSender,
             'senderNumbers' => $senderNumbers,
             'hasAssignedSenders' => $senderNumbers->isNotEmpty(),
@@ -58,17 +63,21 @@ class SmsSendController extends Controller
     {
         $this->authorize('create', SmsMessage::class);
 
+        $user = auth()->user();
         $message = (string) $request->input('message', '');
         $recipient = (string) $request->input('recipient', '');
 
         $segments = $this->segmentCalculator->calculateSegments($message);
         $isUnicode = $this->segmentCalculator->requiresUnicodeEncoding($message);
+        $balance = $this->walletService->getAvailableBalance($user);
 
         return response()->json([
             'chars' => mb_strlen($message),
             'segments' => $segments,
             'credits' => $segments,
             'encoding' => $isUnicode ? 'unicode' : 'gsm',
+            'balance' => (int) $balance,
+            'can_afford' => $balance >= $segments,
             'recipient_valid' => $recipient === '' || $this->phoneNormalizer->isValidTurkishMobile(
                 $this->phoneNormalizer->normalize($recipient)
             ),
@@ -77,47 +86,77 @@ class SmsSendController extends Controller
 
     public function store(SendSmsRequest $request): RedirectResponse|JsonResponse
     {
+        $user = auth()->user();
         $message = $this->smsSendService->send(
-            auth()->user(),
+            $user,
             SendSmsData::fromArray($request->validated()),
         );
 
+        $payload = $this->buildSendResponse(collect([$message]), $user);
+
         if ($request->expectsJson()) {
-            return response()->json([
-                'success' => true,
-                'message' => 'SMS kuyruğa alındı.',
-                'data' => [
-                    'id' => $message->id,
-                    'recipient' => $message->recipient,
-                    'segments' => $message->segments,
-                    'sender_id' => $message->sender_id,
-                    'status' => $message->status->value,
-                ],
-            ]);
+            return response()->json($payload);
         }
 
         return redirect()
             ->route('admin.sms.history.index')
-            ->with('success', 'SMS başarıyla kuyruğa alındı.');
+            ->with('success', $payload['message']);
     }
 
     public function storeBulk(SendBulkSmsRequest $request): RedirectResponse|JsonResponse
     {
+        $user = auth()->user();
         $messages = $this->smsSendService->sendBulk(
-            auth()->user(),
+            $user,
             SendBulkSmsData::fromArray($request->validated()),
         );
 
+        $payload = $this->buildSendResponse($messages, $user);
+
         if ($request->expectsJson()) {
-            return response()->json([
-                'success' => true,
-                'message' => "{$messages->count()} SMS kuyruğa alındı.",
-                'count' => $messages->count(),
-            ]);
+            return response()->json($payload);
         }
 
         return redirect()
             ->route('admin.sms.history.index')
-            ->with('success', "{$messages->count()} SMS başarıyla kuyruğa alındı.");
+            ->with('success', $payload['message']);
+    }
+
+    /**
+     * @param  Collection<int, SmsMessage>  $messages
+     * @return array<string, mixed>
+     */
+    private function buildSendResponse(Collection $messages, $user): array
+    {
+        $messages = $messages->map(fn (SmsMessage $message) => $message->fresh())->values();
+        $sent = $messages->where('status', SmsMessageStatus::Sent)->count();
+        $failed = $messages->where('status', SmsMessageStatus::Failed)->count();
+        $queued = $messages->where('status', SmsMessageStatus::Queued)->count();
+        $balance = (int) $this->walletService->getAvailableBalance($user);
+
+        $summary = match (true) {
+            $failed > 0 && $sent > 0 => "{$sent} SMS gönderildi, {$failed} başarısız.",
+            $failed > 0 && $sent === 0 && $queued === 0 => "{$failed} SMS başarısız. Haklar iade edildi.",
+            $queued > 0 => "{$messages->count()} SMS kuyruğa alındı (worker işleyecek).",
+            default => "{$sent} SMS başarıyla gönderildi.",
+        };
+
+        return [
+            'success' => $failed === 0,
+            'message' => $summary,
+            'count' => $messages->count(),
+            'sent' => $sent,
+            'failed' => $failed,
+            'queued' => $queued,
+            'balance' => $balance,
+            'items' => $messages->map(fn (SmsMessage $message) => [
+                'id' => $message->id,
+                'recipient' => $message->recipient,
+                'status' => $message->status->value,
+                'status_label' => $message->status->label(),
+                'segments' => $message->segments,
+                'error_message' => $message->error_message,
+            ])->all(),
+        ];
     }
 }

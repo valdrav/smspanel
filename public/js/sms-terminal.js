@@ -21,6 +21,13 @@
         body.scrollTop = body.scrollHeight;
     }
 
+    function updateBalance(balance) {
+        const el = $('#sms-balance-value');
+        if (el && typeof balance === 'number') {
+            el.textContent = new Intl.NumberFormat('tr-TR').format(balance);
+        }
+    }
+
     function updatePreview(data) {
         const bubble = $('#phone-bubble');
         const meta = $('#phone-meta');
@@ -33,7 +40,17 @@
         if (statSegments) statSegments.textContent = data.segments || 1;
         if (statEncoding) statEncoding.textContent = data.encoding === 'unicode' ? 'Unicode' : 'GSM';
         if (meta) {
-            meta.textContent = (data.segments || 1) + ' segment · ' + (data.credits || 1) + ' SMS hakkı kullanılacak';
+            let text = (data.segments || 1) + ' segment · ' + (data.credits || 1) + ' SMS hakkı kullanılacak';
+            if (typeof data.balance === 'number') {
+                text += ' · Kalan: ' + data.balance;
+            }
+            if (data.can_afford === false) {
+                text += ' (yetersiz hak)';
+            }
+            meta.textContent = text;
+        }
+        if (typeof data.balance === 'number') {
+            updateBalance(data.balance);
         }
     }
 
@@ -57,6 +74,8 @@
                     segments: data.segments,
                     credits: data.credits,
                     encoding: data.encoding,
+                    balance: data.balance,
+                    can_afford: data.can_afford,
                 });
 
                 if (recipient) {
@@ -67,7 +86,11 @@
                     }
                 }
 
-                terminalLog('Segment: ' + data.segments + ' · Kodlama: ' + (data.encoding === 'unicode' ? 'Unicode (TR)' : 'GSM'), 'info');
+                if (data.can_afford === false) {
+                    terminalLog('Uyarı: Kalan SMS hakkınız bu mesaj için yetersiz (' + data.balance + ').', 'warning');
+                }
+
+                terminalLog('Segment: ' + data.segments + ' · Kodlama: ' + (data.encoding === 'unicode' ? 'Unicode (TR)' : 'GSM') + ' · Hak: ' + data.balance, 'info');
             })
             .catch(() => terminalLog('Önizleme alınamadı.', 'error'));
     }
@@ -75,9 +98,16 @@
     function onInputChange() {
         const activePanel = document.querySelector('.sms-form-panel:not([style*="display: none"])') || document.querySelector('#panel-single');
         const messageEl = activePanel?.querySelector('[name=message]') || $('#sms-message');
-        const recipientEl = activePanel?.querySelector('[name=recipient]') || $('#sms-recipient');
+        const singleRecipient = activePanel?.querySelector('[name=recipient]');
+        const bulkRecipients = activePanel?.querySelector('[name=recipients]');
         const message = messageEl?.value || '';
-        const recipient = recipientEl?.value || '';
+
+        let recipient = '';
+        if (singleRecipient) {
+            recipient = singleRecipient.value || '';
+        } else if (bulkRecipients && bulkRecipients.value.trim()) {
+            recipient = bulkRecipients.value.trim().split(/\r?\n/).map(s => s.trim()).filter(Boolean)[0] || '';
+        }
 
         clearTimeout(previewTimeout);
         previewTimeout = setTimeout(() => fetchPreview(message, recipient), 300);
@@ -89,6 +119,43 @@
         const panel = $('#panel-' + mode);
         if (panel) panel.style.display = 'block';
         terminalLog('Mod: ' + (mode === 'single' ? 'Tekil SMS' : 'Toplu SMS'), 'info');
+        onInputChange();
+    }
+
+    function extractErrorMessage(data, fallback) {
+        if (data && data.message) return data.message;
+        if (data && data.errors) {
+            const first = Object.values(data.errors)[0];
+            if (Array.isArray(first) && first[0]) return first[0];
+        }
+        return fallback || 'Gönderim başarısız';
+    }
+
+    function reportResults(data) {
+        terminalLog((data.success ? '✓ ' : '✗ ') + (data.message || 'İşlem tamamlandı.'), data.success ? 'success' : 'error');
+
+        if (typeof data.balance === 'number') {
+            updateBalance(data.balance);
+            terminalLog('Kalan SMS hakkı: ' + data.balance, 'info');
+        }
+
+        if (data.sent) terminalLog('Gönderilen: ' + data.sent, 'success');
+        if (data.failed) terminalLog('Başarısız: ' + data.failed, 'error');
+        if (data.queued) terminalLog('Kuyrukta kalan: ' + data.queued, 'warning');
+
+        (data.items || []).slice(0, 20).forEach(function (item) {
+            if (item.status === 'sent') {
+                terminalLog('#' + item.id + ' ' + item.recipient + ' → Gönderildi', 'success');
+            } else if (item.status === 'failed') {
+                terminalLog('#' + item.id + ' ' + item.recipient + ' → Hata: ' + (item.error_message || 'bilinmiyor'), 'error');
+            } else {
+                terminalLog('#' + item.id + ' ' + item.recipient + ' → ' + (item.status_label || item.status), 'warning');
+            }
+        });
+
+        if ((data.items || []).length > 20) {
+            terminalLog('... ve ' + (data.items.length - 20) + ' kayıt daha (SMS Geçmişi’nden bakın)', 'muted');
+        }
     }
 
     function sendSms(form, url) {
@@ -109,18 +176,15 @@
         })
             .then(async r => {
                 const data = await r.json().catch(() => ({}));
-                if (!r.ok) throw new Error(data.message || 'Gönderim başarısız');
+                if (!r.ok) throw new Error(extractErrorMessage(data));
                 return data;
             })
             .then(data => {
-                terminalLog('✓ ' + (data.message || 'SMS kuyruğa alındı.'), 'success');
-                if (data.data) {
-                    terminalLog('  ID: #' + data.data.id + ' → ' + data.data.recipient + ' (' + data.data.segments + ' segment)', 'success');
-                }
-                if (data.count) {
-                    terminalLog('  Toplam: ' + data.count + ' SMS kuyruğa alındı', 'success');
-                }
+                reportResults(data);
                 form.reset();
+                // Toplu gönderim sonrası tekil alandaki eski numarayı da temizle
+                const singleRecipient = $('#sms-recipient');
+                if (singleRecipient) singleRecipient.value = '';
                 onInputChange();
             })
             .catch(err => {
@@ -139,8 +203,7 @@
     document.addEventListener('DOMContentLoaded', function () {
         if (!config.previewUrl) return;
 
-        terminalLog('SMS Terminal v1.0 hazır.', 'success');
-        terminalLog('Mesaj yazmaya başlayın — canlı önizleme aktif.', 'muted');
+        terminalLog('SMS Terminal hazır. Haklar paket/onay ile yüklenir; gönderimde düşer.', 'success');
 
         $$('.mode-btn').forEach(btn => {
             btn.addEventListener('click', () => switchMode(btn.dataset.mode));

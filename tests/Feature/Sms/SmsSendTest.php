@@ -53,14 +53,15 @@ class SmsSendTest extends TestCase
      */
     public function test_user_can_send_single_sms(): void
     {
-        $response = $this->actingAs($this->user)->post(route('admin.sms.send.store'), [
+        $response = $this->actingAs($this->user)->postJson(route('admin.sms.send.store'), [
             'recipient' => '5551234567',
             'message' => 'Test mesajı — Türkçe karakter: şğüöç',
             'sender_id' => 'SMSPANEL',
         ]);
 
-        $response->assertRedirect(route('admin.sms.history.index'));
-        $response->assertSessionHas('success');
+        $response->assertOk();
+        $response->assertJsonPath('sent', 1);
+        $response->assertJsonPath('balance', 99);
 
         $this->assertDatabaseHas('sms_messages', [
             'user_id' => $this->user->id,
@@ -91,13 +92,15 @@ class SmsSendTest extends TestCase
      */
     public function test_user_can_send_bulk_sms(): void
     {
-        $response = $this->actingAs($this->user)->post(route('admin.sms.send.bulk'), [
+        $response = $this->actingAs($this->user)->postJson(route('admin.sms.send.bulk'), [
             'recipients' => "5551234567\n5559876543",
             'message' => 'Toplu test mesajı',
         ]);
 
-        $response->assertRedirect(route('admin.sms.history.index'));
+        $response->assertOk();
+        $response->assertJsonPath('count', 2);
         $this->assertDatabaseCount('sms_messages', 2);
+        $this->assertEquals(98, (float) $this->user->fresh()->sms_balance);
     }
 
     public function test_easysendsms_bulk_uses_settings_sender_and_batches_thirty_recipients(): void
@@ -133,14 +136,17 @@ class SmsSendTest extends TestCase
             range(1, 60),
         );
 
-        $response = $this->actingAs($this->user)->post(route('admin.sms.send.bulk'), [
+        $response = $this->actingAs($this->user)->postJson(route('admin.sms.send.bulk'), [
             'recipients' => implode("\n", $recipients),
             'message' => 'Toplu gönderim',
         ]);
 
-        $response->assertRedirect(route('admin.sms.history.index'));
+        $response->assertOk();
+        $response->assertJsonPath('sent', 60);
+        $response->assertJsonPath('failed', 0);
         $this->assertDatabaseCount('sms_messages', 60);
         $this->assertCount(2, Http::recorded());
+        $this->assertEquals(40, (float) $this->user->fresh()->sms_balance);
 
         Http::assertSent(fn (Request $request): bool => $request->hasHeader('apikey', 'settings-api-key')
             && $request['from'] === 'INOVAPP'

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Enums\PackageOrderStatus;
 use App\Http\Controllers\Controller;
 use App\Models\PackageOrder;
+use App\Models\SmsPackage;
 use App\Repositories\Contracts\UserRepositoryInterface;
 use App\Services\SmsPackage\PackageOrderService;
 use Illuminate\Http\RedirectResponse;
@@ -24,15 +25,44 @@ class PackageOrderController extends Controller
         $user = auth()->user();
 
         return view('admin.package-orders.index', [
-            'pageTitle' => $user->can('packages.manage') ? 'Paket Siparişleri' : 'Satın Alma Taleplerim',
+            'pageTitle' => $user->can('packages.manage') ? 'Paket Siparişleri & Dağıtım' : 'Satın Alma Taleplerim',
             'orders' => $user->can('packages.manage')
                 ? $this->packageOrderService->listAdmin($request->only(['status', 'user_id']))
                 : $this->packageOrderService->listForUser($user),
             'filters' => $request->only(['status', 'user_id']),
             'canManage' => $user->can('packages.manage'),
             'users' => $user->can('packages.manage') ? $this->userRepository->all() : collect(),
+            'packages' => $user->can('packages.manage')
+                ? SmsPackage::query()->where('is_active', true)->orderBy('sort_order')->get()
+                : collect(),
             'statuses' => PackageOrderStatus::cases(),
         ]);
+    }
+
+    public function distribute(Request $request): RedirectResponse
+    {
+        $this->authorize('create', SmsPackage::class);
+
+        $data = $request->validate([
+            'user_id' => ['required', 'integer', 'exists:users,id'],
+            'sms_package_id' => ['required', 'integer', 'exists:sms_packages,id'],
+            'admin_note' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $target = $this->userRepository->findByIdOrFail((int) $data['user_id']);
+        $package = SmsPackage::query()->findOrFail((int) $data['sms_package_id']);
+
+        $order = $this->packageOrderService->distribute(
+            $target,
+            $package,
+            auth()->user(),
+            $data['admin_note'] ?? null,
+        );
+
+        return back()->with(
+            'success',
+            "{$package->name} paketi {$target->name} kullanıcısına dağıtıldı (+{$package->sms_amount} SMS). Sipariş #{$order->id}"
+        );
     }
 
     public function approve(Request $request, PackageOrder $order): RedirectResponse

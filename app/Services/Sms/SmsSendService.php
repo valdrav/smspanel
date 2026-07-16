@@ -6,8 +6,8 @@ use App\DTOs\ActivityLog\CreateActivityLogData;
 use App\DTOs\Sms\SendBulkSmsData;
 use App\DTOs\Sms\SendSmsData;
 use App\Enums\ActivityAction;
-use App\Enums\SmsProviderDriver;
 use App\Enums\SmsMessageStatus;
+use App\Enums\SmsProviderDriver;
 use App\Events\Sms\SmsBulkQueued;
 use App\Events\Sms\SmsMessageQueued;
 use App\Exceptions\BusinessException;
@@ -16,10 +16,10 @@ use App\Jobs\Sms\SendSmsJob;
 use App\Models\SmsMessage;
 use App\Models\User;
 use App\Repositories\Contracts\SmsMessageRepositoryInterface;
+use App\Repositories\Contracts\SmsProviderRepositoryInterface;
 use App\Repositories\Contracts\UserRepositoryInterface;
 use App\Services\Contracts\ActivityLogServiceInterface;
 use App\Services\Contracts\SmsSendServiceInterface;
-use App\Repositories\Contracts\SmsProviderRepositoryInterface;
 use App\Services\Contracts\UserSenderNumberServiceInterface;
 use App\Services\Contracts\WalletServiceInterface;
 use App\Sms\Support\PhoneNormalizer;
@@ -57,12 +57,30 @@ class SmsSendService implements SmsSendServiceInterface
             throw new BusinessException('Geçerli bir cep telefonu numarası giriniz.');
         }
 
-        return $this->createAndQueueMessage(
+        $message = $this->createAndQueueMessage(
             user: $user,
             recipient: $recipient,
             message: $data->message,
             senderId: $this->userSenderNumberService->resolveSenderId($user, $data->senderId),
+            dispatchImmediately: false,
         );
+
+        $this->dispatchBatches(collect([$message]), sync: $this->shouldDispatchSync(1));
+
+        $this->activityLogService->record(new CreateActivityLogData(
+            action: ActivityAction::Created,
+            description: "SMS gönderildi/kuyruğa alındı: {$recipient}",
+            userId: Auth::id(),
+            subjectType: SmsMessage::class,
+            subjectId: $message->id,
+            properties: ['segments' => $message->segments],
+            ipAddress: request()->ip(),
+            userAgent: request()->userAgent(),
+        ));
+
+        event(new SmsMessageQueued($message->fresh()));
+
+        return $message->fresh();
     }
 
     /**
@@ -109,14 +127,11 @@ class SmsSendService implements SmsSendServiceInterface
             }
         });
 
-        foreach ($messages->pluck('id')->chunk(SendSmsBatchJob::MAX_MESSAGES) as $chunkIndex => $messageIds) {
-            SendSmsBatchJob::dispatch($messageIds->values()->all())
-                ->delay(now()->addSeconds(intdiv((int) $chunkIndex, 25)));
-        }
+        $this->dispatchBatches($messages, sync: $this->shouldDispatchSync($messages->count()));
 
         $this->activityLogService->record(new CreateActivityLogData(
             action: ActivityAction::Created,
-            description: "Toplu SMS kuyruğa alındı: {$messages->count()} adet",
+            description: "Toplu SMS gönderildi/kuyruğa alındı: {$messages->count()} adet",
             userId: Auth::id(),
             subjectType: SmsMessage::class,
             properties: ['batch_id' => $batchId, 'count' => $messages->count()],
@@ -126,11 +141,11 @@ class SmsSendService implements SmsSendServiceInterface
 
         event(new SmsBulkQueued($user, $batchId, $messages->count()));
 
-        return $messages;
+        return $messages->map(fn (SmsMessage $message) => $message->fresh())->values();
     }
 
     /**
-     * SMS kaydı oluşturur ve kuyruğa alır.
+     * SMS kaydı oluşturur (hak düşer). Gönderim ayrı dispatch edilir.
      */
     private function createAndQueueMessage(
         User $user,
@@ -147,13 +162,13 @@ class SmsSendService implements SmsSendServiceInterface
             $lockedUser = $this->userRepository->findByIdOrFail($user->id);
             $lockedUser->load('organization');
 
-            if ((float) $this->walletService->getAvailableBalance($lockedUser) < $creditsUsed) {
-                throw new BusinessException('Yetersiz SMS hakkı. Lütfen kredi yükleyin.');
+            $available = (float) $this->walletService->getAvailableBalance($lockedUser);
+
+            if ($available < $creditsUsed) {
+                throw new BusinessException(
+                    "Yetersiz SMS hakkı. Kalan: {$available} adet, gereken: {$creditsUsed} adet. Paket satın alın veya yöneticide paket dağıtımı yaptırın."
+                );
             }
-
-            $this->walletService->debit($lockedUser, (float) $creditsUsed, "SMS gönderimi ({$segments} segment): {$recipient}");
-
-            $providerCode = $this->resolveProviderCode();
 
             /** @var SmsMessage $smsMessage */
             $smsMessage = $this->smsMessageRepository->create([
@@ -163,27 +178,21 @@ class SmsSendService implements SmsSendServiceInterface
                 'recipient' => $recipient,
                 'message' => $message,
                 'sender_id' => $senderId,
-                'provider' => $providerCode,
+                'provider' => $this->resolveProviderCode(),
                 'status' => SmsMessageStatus::Queued->value,
                 'segments' => $segments,
                 'cost' => $creditsUsed,
             ]);
 
+            $this->walletService->debit(
+                $lockedUser,
+                (float) $creditsUsed,
+                "SMS gönderimi ({$segments} segment): {$recipient}",
+                $smsMessage,
+            );
+
             if ($dispatchImmediately) {
-                SendSmsJob::dispatch($smsMessage->id);
-
-                $this->activityLogService->record(new CreateActivityLogData(
-                    action: ActivityAction::Created,
-                    description: "SMS kuyruğa alındı: {$recipient}",
-                    userId: Auth::id(),
-                    subjectType: SmsMessage::class,
-                    subjectId: $smsMessage->id,
-                    properties: ['segments' => $segments, 'credits_used' => $creditsUsed],
-                    ipAddress: request()->ip(),
-                    userAgent: request()->userAgent(),
-                ));
-
-                event(new SmsMessageQueued($smsMessage));
+                SendSmsJob::dispatchSync($smsMessage->id);
             }
 
             return $smsMessage;
@@ -191,8 +200,40 @@ class SmsSendService implements SmsSendServiceInterface
     }
 
     /**
-     * Aktif varsayılan sağlayıcı kodunu döndürür.
+     * @param  Collection<int, SmsMessage>  $messages
      */
+    private function dispatchBatches(Collection $messages, bool $sync): void
+    {
+        foreach ($messages->pluck('id')->chunk(SendSmsBatchJob::MAX_MESSAGES) as $chunkIndex => $messageIds) {
+            $ids = $messageIds->values()->all();
+
+            if ($sync) {
+                SendSmsBatchJob::dispatchSync($ids);
+
+                continue;
+            }
+
+            SendSmsBatchJob::dispatch($ids)
+                ->delay(now()->addSeconds(intdiv((int) $chunkIndex, 25)));
+        }
+    }
+
+    private function shouldDispatchSync(int $recipientCount): bool
+    {
+        $mode = (string) config('sms.dispatch_mode', 'auto');
+
+        if ($mode === 'sync') {
+            return true;
+        }
+
+        if ($mode === 'queue') {
+            return false;
+        }
+
+        // auto: küçük/orta manuel gönderimler worker beklemeden tamamlanır.
+        return $recipientCount <= (int) config('sms.sync_threshold', 300);
+    }
+
     private function resolveProviderCode(): string
     {
         $provider = $this->smsProviderRepository->findDefaultActive();

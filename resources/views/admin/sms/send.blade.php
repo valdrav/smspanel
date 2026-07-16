@@ -10,7 +10,12 @@
         </div>
         <div class="sms-stat-pill mt-2 mt-md-0">
             <i class="fas fa-bolt text-warning"></i>
-            Kalan hak: <strong>{{ number_format($balance, 0, ',', '.') }}</strong> SMS
+            @if(($balanceSource ?? 'personal') === 'organization')
+                Organizasyon hakkı:
+            @else
+                Kalan hak:
+            @endif
+            <strong id="sms-balance-value">{{ number_format($balance, 0, ',', '.') }}</strong> SMS
         </div>
     </div>
 @stop

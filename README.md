@@ -113,6 +113,8 @@ gh repo create smspanel --private --source=. --remote=origin --push
 | `SMS_DEFAULT_PROVIDER` | `mock`, `netgsm`, `iletimerkezi`, `easysendsms` |
 | `SMS_QUEUE` | Kuyruk adı (varsayılan: `sms`) |
 | `SMS_BATCH_SIZE` | Manuel toplu gönderim limiti (varsayılan: `1000`) |
+| `SMS_DISPATCH_MODE` | `auto` / `sync` / `queue` (varsayılan: `auto`) |
+| `SMS_SYNC_THRESHOLD` | `auto` modunda anında gönderim eşiği (varsayılan: `300`) |
 | `SMS_CAMPAIGN_MAX_RECIPIENTS` | Kampanya max alıcı (200000) |
 | `QUEUE_CONNECTION` | `database` (Plesk'te önerilir) |
 
@@ -128,10 +130,16 @@ Ardından Süper Yönetici → **SMS API Ayarları** ekranında EasySendSMS kayd
 düzenleyin. API anahtarı ile onaylı gönderici başlığını girin ve sağlayıcıyı
 **Aktif + Varsayılan** yapın. Anahtar şifreli saklanır.
 
+SMS paneli hakları paket ile paylaştırılır:
+1. Paket oluşturun (Paket Yönetimi)
+2. **Paket Siparişleri → Paket Dağıt** ile kullanıcıya yükleyin
+   veya müşteri talebini onaylayın
+3. Gönderimde hak düşer; başarısız gönderimde iade edilir
+
 Manuel toplu gönderimde 1000, kampanyalarda 200.000 alıcı desteklenir.
-EasySendSMS'e her API isteğinde en fazla 30 benzersiz numara gönderilir; kalan
-alıcılar kuyruk işleriyle otomatik parçalanır. Production'da `sms` queue worker
-sürekli çalışmalıdır.
+EasySendSMS'e her API isteğinde en fazla 30 benzersiz numara gönderilir.
+`SMS_DISPATCH_MODE=auto` iken 300'e kadar alıcı worker beklemeden anında
+gönderilir; daha büyük işler ve kampanyalar `sms` kuyruğunu kullanır.
 
 ## Lisans
 

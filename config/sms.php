@@ -53,6 +53,14 @@ return [
 
     'queue' => env('SMS_QUEUE', 'sms'),
 
+    /*
+    | auto: <= sync_threshold ise anında gönder (worker gerekmez)
+    | sync: her zaman anında
+    | queue: her zaman kuyruk (worker zorunlu)
+    */
+    'dispatch_mode' => env('SMS_DISPATCH_MODE', 'auto'),
+    'sync_threshold' => (int) env('SMS_SYNC_THRESHOLD', 300),
+
     'batch_size' => (int) env('SMS_BATCH_SIZE', 1000),
 
     'campaign' => [
