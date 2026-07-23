@@ -80,6 +80,49 @@ class SmsProviderManagementTest extends TestCase
         ]);
     }
 
+    public function test_ensure_texcell_updates_existing_when_mock_also_present(): void
+    {
+        config([
+            'sms.texcell.account' => 'CTU780',
+            'sms.texcell.password' => 'secret',
+            'sms.texcell.base_url' => 'http://38.150.64.36:20003',
+        ]);
+
+        SmsProvider::create([
+            'code' => 'mock',
+            'name' => 'Mock',
+            'driver' => 'mock',
+            'config' => [],
+            'is_active' => true,
+            'is_default' => true,
+            'priority' => 100,
+        ]);
+
+        $existing = SmsProvider::create([
+            'code' => 'texcell',
+            'name' => 'Old Texcell',
+            'driver' => 'texcell',
+            'config' => ['account' => 'OLD', 'password' => 'old'],
+            'is_active' => false,
+            'is_default' => false,
+            'priority' => 1,
+        ]);
+
+        $ensured = app(\App\Services\Sms\EnsureTexcellProvider::class)->ensure();
+
+        $this->assertSame($existing->id, $ensured->id);
+        $this->assertSame('texcell', $ensured->code);
+        $this->assertTrue($ensured->is_active);
+        $this->assertTrue($ensured->is_default);
+        $this->assertSame('CTU780', $ensured->config['account'] ?? null);
+
+        $this->assertDatabaseHas('sms_providers', [
+            'code' => 'mock',
+            'is_active' => 0,
+            'is_default' => 0,
+        ]);
+    }
+
     public function test_texcell_password_is_not_rendered_and_blank_update_preserves_it(): void
     {
         $provider = SmsProvider::create([

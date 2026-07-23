@@ -4,6 +4,7 @@ namespace App\Services\Sms;
 
 use App\Enums\SmsProviderDriver;
 use App\Models\SmsProvider;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use RuntimeException;
 
@@ -21,46 +22,72 @@ class EnsureTexcellProvider
 
         $config = $this->resolvedConfig();
 
-        $texcell = SmsProvider::query()
-            ->where('code', 'texcell')
-            ->orWhere('driver', SmsProviderDriver::Texcell->value)
-            ->orderByDesc('is_default')
-            ->first();
-
-        // Sunucuda sık görülen durum: tek kayıt = mock (#1). Yerinde Texcell’e çevir.
-        if ($texcell === null) {
+        return DB::transaction(function () use ($config): SmsProvider {
+            // 1) code=texcell varsa onu kullan (mock’u yeniden adlandırma — unique çakışması olmasın)
             $texcell = SmsProvider::query()
-                ->where(function ($query): void {
-                    $query->where('code', 'mock')
-                        ->orWhere('driver', SmsProviderDriver::Mock->value);
-                })
-                ->orderBy('id')
+                ->where('code', 'texcell')
+                ->lockForUpdate()
                 ->first();
-        }
 
-        if ($texcell === null) {
-            $texcell = new SmsProvider(['code' => 'texcell']);
-        }
+            // 2) Yoksa driver=texcell olan kaydı bul
+            if ($texcell === null) {
+                $texcell = SmsProvider::query()
+                    ->where('driver', SmsProviderDriver::Texcell->value)
+                    ->orderByDesc('is_default')
+                    ->orderBy('id')
+                    ->lockForUpdate()
+                    ->first();
+            }
 
-        $texcell->fill([
-            'code' => 'texcell',
-            'name' => 'Texcell EIMS',
-            'driver' => SmsProviderDriver::Texcell->value,
-            'config' => $config,
-            'is_active' => true,
-            'is_default' => true,
-            'priority' => 1,
-        ]);
-        $texcell->save();
+            // 3) Hâlâ yoksa ve code=texcell çakışması yoksa mock’u yerinde çevir
+            if ($texcell === null) {
+                $texcell = SmsProvider::query()
+                    ->where(function ($query): void {
+                        $query->where('code', 'mock')
+                            ->orWhere('driver', SmsProviderDriver::Mock->value);
+                    })
+                    ->orderBy('id')
+                    ->lockForUpdate()
+                    ->first();
+            }
 
-        SmsProvider::query()
-            ->whereKeyNot($texcell->id)
-            ->update([
-                'is_default' => false,
-                'is_active' => false,
+            if ($texcell === null) {
+                $texcell = new SmsProvider;
+            }
+
+            // code’u texcell yapmadan önce başka satırda aynı code varsa onu kullan
+            if ($texcell->exists && $texcell->code !== 'texcell') {
+                $byCode = SmsProvider::query()
+                    ->where('code', 'texcell')
+                    ->whereKeyNot($texcell->id)
+                    ->lockForUpdate()
+                    ->first();
+
+                if ($byCode !== null) {
+                    $texcell = $byCode;
+                }
+            }
+
+            $texcell->fill([
+                'code' => 'texcell',
+                'name' => 'Texcell EIMS',
+                'driver' => SmsProviderDriver::Texcell->value,
+                'config' => $config,
+                'is_active' => true,
+                'is_default' => true,
+                'priority' => 1,
             ]);
+            $texcell->save();
 
-        return $texcell->fresh() ?? $texcell;
+            SmsProvider::query()
+                ->whereKeyNot($texcell->id)
+                ->update([
+                    'is_default' => false,
+                    'is_active' => false,
+                ]);
+
+            return $texcell->fresh() ?? $texcell;
+        });
     }
 
     /**
