@@ -21,17 +21,37 @@ class EnsureTexcellProvider
 
         $config = $this->resolvedConfig();
 
-        $texcell = SmsProvider::query()->updateOrCreate(
-            ['code' => 'texcell'],
-            [
-                'name' => 'Texcell EIMS',
-                'driver' => SmsProviderDriver::Texcell->value,
-                'config' => $config,
-                'is_active' => true,
-                'is_default' => true,
-                'priority' => 1,
-            ]
-        );
+        $texcell = SmsProvider::query()
+            ->where('code', 'texcell')
+            ->orWhere('driver', SmsProviderDriver::Texcell->value)
+            ->orderByDesc('is_default')
+            ->first();
+
+        // Sunucuda sık görülen durum: tek kayıt = mock (#1). Yerinde Texcell’e çevir.
+        if ($texcell === null) {
+            $texcell = SmsProvider::query()
+                ->where(function ($query): void {
+                    $query->where('code', 'mock')
+                        ->orWhere('driver', SmsProviderDriver::Mock->value);
+                })
+                ->orderBy('id')
+                ->first();
+        }
+
+        if ($texcell === null) {
+            $texcell = new SmsProvider(['code' => 'texcell']);
+        }
+
+        $texcell->fill([
+            'code' => 'texcell',
+            'name' => 'Texcell EIMS',
+            'driver' => SmsProviderDriver::Texcell->value,
+            'config' => $config,
+            'is_active' => true,
+            'is_default' => true,
+            'priority' => 1,
+        ]);
+        $texcell->save();
 
         SmsProvider::query()
             ->whereKeyNot($texcell->id)
