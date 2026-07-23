@@ -90,6 +90,12 @@
                     terminalLog('Uyarı: Kalan SMS hakkınız bu mesaj için yetersiz (' + data.balance + ').', 'warning');
                 }
 
+                if (data.texcell_sync_error) {
+                    terminalLog('Texcell bakiye senkronu başarısız: ' + data.texcell_sync_error, 'warning');
+                } else if (data.texcell_synced && typeof data.balance === 'number' && data.balance > 0) {
+                    terminalLog('Texcell bakiyesi güncellendi → ' + data.balance + ' SMS hakkı.', 'success');
+                }
+
                 terminalLog('Segment: ' + data.segments + ' · Kodlama: ' + (data.encoding === 'unicode' ? 'Unicode (TR)' : 'GSM') + ' · Hak: ' + data.balance, 'info');
             })
             .catch(() => terminalLog('Önizleme alınamadı.', 'error'));

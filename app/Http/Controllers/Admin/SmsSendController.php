@@ -10,7 +10,9 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Sms\SendBulkSmsRequest;
 use App\Http\Requests\Sms\SendSmsRequest;
 use App\Models\SmsMessage;
+use App\Models\User;
 use App\Repositories\Contracts\SmsProviderRepositoryInterface;
+use App\Sms\DTOs\SmsBalanceResult;
 use App\Services\Contact\ContactService;
 use App\Services\Contracts\SmsSendServiceInterface;
 use App\Services\Contracts\UserSenderNumberServiceInterface;
@@ -49,24 +51,15 @@ class SmsSendController extends Controller
             ?? $senderNumbers->first()?->sender_id
             ?? $this->userSenderNumberService->resolveSenderId($user, null);
 
-        $defaultProvider = $this->smsProviderRepository->findDefaultActive();
-        $defaultProviderIsTexcell = $defaultProvider?->driver === SmsProviderDriver::Texcell
-            || ($defaultProvider === null && config('sms.default_provider') === 'texcell');
+        $defaultProviderIsTexcell = $this->defaultProviderIsTexcell();
+        $sync = $this->maybeSyncTexcellBalance($user);
+        $user->refresh();
 
-        $texcellSyncError = null;
-        $texcellSynced = false;
-        $texcellUsd = null;
-
-        if (
-            $defaultProviderIsTexcell
-            && filter_var(config('sms.texcell.sync_balance_to_admin', true), FILTER_VALIDATE_BOOL)
-        ) {
-            $sync = $this->texcellBalanceSyncService->syncDefault($user);
-            $user->refresh();
-            $texcellSynced = $sync->success;
-            $texcellSyncError = $sync->success ? null : ($sync->errorMessage ?? 'Texcell bakiye alınamadı.');
-            $texcellUsd = $sync->success ? $sync->rawUsd : null;
-        }
+        $texcellSynced = $sync?->success ?? false;
+        $texcellSyncError = $sync !== null && ! $sync->success
+            ? ($sync->errorMessage ?? 'Texcell bakiye alınamadı.')
+            : null;
+        $texcellUsd = $sync?->success ? $sync->rawUsd : null;
 
         $balance = $this->walletService->getAvailableBalance($user);
 
@@ -95,6 +88,9 @@ class SmsSendController extends Controller
         $message = (string) $request->input('message', '');
         $recipient = (string) $request->input('recipient', '');
 
+        $sync = $this->maybeSyncTexcellBalance($user);
+        $user->refresh();
+
         $segments = $this->segmentCalculator->calculateSegments($message);
         $isUnicode = $this->segmentCalculator->requiresUnicodeEncoding($message);
         $balance = $this->walletService->getAvailableBalance($user);
@@ -109,12 +105,20 @@ class SmsSendController extends Controller
             'recipient_valid' => $recipient === '' || $this->phoneNormalizer->isValidRecipient(
                 $this->phoneNormalizer->normalize($recipient)
             ),
+            'texcell_synced' => $sync?->success,
+            'texcell_sync_error' => $sync !== null && ! $sync->success
+                ? ($sync->errorMessage ?? 'Texcell bakiye alınamadı.')
+                : null,
+            'texcell_usd' => $sync?->success ? $sync->rawUsd : null,
         ]);
     }
 
     public function store(SendSmsRequest $request): RedirectResponse|JsonResponse
     {
         $user = auth()->user();
+        $this->maybeSyncTexcellBalance($user);
+        $user->refresh();
+
         $message = $this->smsSendService->send(
             $user,
             SendSmsData::fromArray($request->validated()),
@@ -134,6 +138,9 @@ class SmsSendController extends Controller
     public function storeBulk(SendBulkSmsRequest $request): RedirectResponse|JsonResponse
     {
         $user = auth()->user();
+        $this->maybeSyncTexcellBalance($user);
+        $user->refresh();
+
         $messages = $this->smsSendService->sendBulk(
             $user,
             SendBulkSmsData::fromArray($request->validated()),
@@ -148,6 +155,27 @@ class SmsSendController extends Controller
         return redirect()
             ->route('admin.sms.history.index')
             ->with('success', $payload['message']);
+    }
+
+    private function defaultProviderIsTexcell(): bool
+    {
+        $defaultProvider = $this->smsProviderRepository->findDefaultActive();
+
+        return $defaultProvider?->driver === SmsProviderDriver::Texcell
+            || ($defaultProvider === null && config('sms.default_provider') === 'texcell');
+    }
+
+    private function maybeSyncTexcellBalance(User $user): ?SmsBalanceResult
+    {
+        if (! $this->defaultProviderIsTexcell()) {
+            return null;
+        }
+
+        if (! filter_var(config('sms.texcell.sync_balance_to_admin', true), FILTER_VALIDATE_BOOL)) {
+            return null;
+        }
+
+        return $this->texcellBalanceSyncService->syncDefault($user);
     }
 
     /**
