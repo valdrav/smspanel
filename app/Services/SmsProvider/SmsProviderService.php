@@ -107,6 +107,13 @@ class SmsProviderService implements SmsProviderServiceInterface
 
     public function testBalance(SmsProvider $provider): SmsBalanceResult
     {
+        if ($provider->driver === null) {
+            return new SmsBalanceResult(
+                success: false,
+                errorMessage: 'Bu sağlayıcının sürücüsü artık desteklenmiyor. Kaydı silip Texcell ekleyin.',
+            );
+        }
+
         $instance = $this->smsProviderFactory->makeFromModel($provider);
         $result = $instance->getBalance();
 

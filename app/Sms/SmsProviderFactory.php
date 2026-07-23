@@ -65,7 +65,13 @@ class SmsProviderFactory
      */
     public function makeFromModel(SmsProvider $provider): SmsProviderInterface
     {
-        return $this->makeByDriver($provider->driver->value, $provider->config ?? []);
+        $driver = $provider->driverValue();
+
+        if ($driver === '' || $provider->driver === null) {
+            throw new InvalidArgumentException("SMS sürücüsü bulunamadı veya desteklenmiyor: {$provider->code}");
+        }
+
+        return $this->makeByDriver($driver, $provider->config ?? []);
     }
 
     /**

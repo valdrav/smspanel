@@ -22,7 +22,7 @@
             <label>Sürücü <span class="text-danger">*</span></label>
             <select name="driver" id="driver-select" class="form-control" required>
                 @foreach ($drivers as $driver)
-                    <option value="{{ $driver->value }}" @selected(old('driver', $provider->driver->value ?? 'mock') === $driver->value)>{{ $driver->label() }}</option>
+                    <option value="{{ $driver->value }}" @selected(old('driver', $provider->driverValue() ?? 'texcell') === $driver->value)>{{ $driver->label() }}</option>
                 @endforeach
             </select>
         </div>

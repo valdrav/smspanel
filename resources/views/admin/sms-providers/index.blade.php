@@ -30,7 +30,7 @@
                         <tr>
                             <td><code>{{ $provider->code }}</code></td>
                             <td>{{ $provider->name }}</td>
-                            <td>{{ $provider->driver->label() }}</td>
+                            <td>{{ $provider->driverLabel() }}</td>
                             <td>
                                 @if($provider->last_balance !== null)
                                     {{ number_format($provider->last_balance, 0, ',', '.') }} SMS

@@ -40,7 +40,7 @@ class SmsProviderController extends Controller
 
         return view('admin.sms-providers.create', [
             'pageTitle' => 'Yeni SMS Sağlayıcı',
-            'drivers' => SmsProviderDriver::cases(),
+            'drivers' => $this->availableDrivers(),
         ]);
     }
 
@@ -58,7 +58,7 @@ class SmsProviderController extends Controller
         return view('admin.sms-providers.edit', [
             'pageTitle' => 'SMS Sağlayıcı Düzenle',
             'provider' => $smsProvider,
-            'drivers' => SmsProviderDriver::cases(),
+            'drivers' => $this->availableDrivers(),
         ]);
     }
 
@@ -89,5 +89,18 @@ class SmsProviderController extends Controller
         }
 
         return back()->with('error', $result->errorMessage ?? 'Bakiye sorgulanamadı.');
+    }
+
+    /**
+     * @return list<SmsProviderDriver>
+     */
+    private function availableDrivers(): array
+    {
+        $registered = array_keys(config('sms.drivers', []));
+
+        return array_values(array_filter(
+            SmsProviderDriver::cases(),
+            fn (SmsProviderDriver $driver): bool => in_array($driver->value, $registered, true),
+        ));
     }
 }

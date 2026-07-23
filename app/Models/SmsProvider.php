@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\SmsProviderDriver;
 use Database\Factories\SmsProviderFactory;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
@@ -13,7 +14,7 @@ use Illuminate\Database\Eloquent\Model;
  * @property int $id
  * @property string $code
  * @property string $name
- * @property SmsProviderDriver $driver
+ * @property SmsProviderDriver|null $driver
  * @property array<string, mixed> $config
  * @property bool $is_active
  * @property bool $is_default
@@ -46,7 +47,6 @@ class SmsProvider extends Model
     protected function casts(): array
     {
         return [
-            'driver' => SmsProviderDriver::class,
             'config' => 'encrypted:array',
             'is_active' => 'boolean',
             'is_default' => 'boolean',
@@ -54,5 +54,42 @@ class SmsProvider extends Model
             'last_balance' => 'decimal:4',
             'last_balance_checked_at' => 'datetime',
         ];
+    }
+
+    /**
+     * Bilinmeyen eski sürücü değerlerinde (örn. easysendsms) sayfa çökmesin.
+     *
+     * @return Attribute<SmsProviderDriver|null, string>
+     */
+    protected function driver(): Attribute
+    {
+        return Attribute::make(
+            get: function (mixed $value): ?SmsProviderDriver {
+                if ($value instanceof SmsProviderDriver) {
+                    return $value;
+                }
+
+                return SmsProviderDriver::tryFrom((string) $value);
+            },
+            set: function (mixed $value): string {
+                if ($value instanceof SmsProviderDriver) {
+                    return $value->value;
+                }
+
+                return (string) $value;
+            },
+        );
+    }
+
+    public function driverLabel(): string
+    {
+        return $this->driver?->label()
+            ?? (string) ($this->attributes['driver'] ?? 'bilinmiyor');
+    }
+
+    public function driverValue(): string
+    {
+        return $this->driver?->value
+            ?? (string) ($this->attributes['driver'] ?? '');
     }
 }
