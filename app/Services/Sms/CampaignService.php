@@ -173,7 +173,7 @@ class CampaignService
 
         $user = $this->userRepository->findByIdOrFail($campaign->user_id);
         $segments = $this->segmentCalculator->calculateSegments($campaign->message);
-        $providerCode = $this->smsProviderRepository->findDefaultActive()?->code ?? config('sms.default_provider', 'mock');
+        $providerCode = $this->smsProviderRepository->findDefaultActive()?->code ?? config('sms.default_provider', 'texcell');
         $queuedMessageIds = [];
 
         foreach ($recipients as $recipient) {

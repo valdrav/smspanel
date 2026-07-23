@@ -61,11 +61,23 @@ class SmsProviderManagementTest extends TestCase
 
     public function test_factory_resolves_texcell_as_default_provider(): void
     {
+        config([
+            'sms.default_provider' => 'texcell',
+            'sms.texcell.account' => 'CTU780',
+            'sms.texcell.password' => 'secret',
+            'sms.texcell.base_url' => 'http://38.150.64.36:20003',
+        ]);
+
         $this->seed(SmsProviderSeeder::class);
 
         $provider = app(\App\Sms\SmsProviderFactory::class)->resolveDefault();
 
         $this->assertSame('texcell', $provider->getName());
+        $this->assertDatabaseHas('sms_providers', [
+            'code' => 'texcell',
+            'is_active' => 1,
+            'is_default' => 1,
+        ]);
     }
 
     public function test_texcell_password_is_not_rendered_and_blank_update_preserves_it(): void

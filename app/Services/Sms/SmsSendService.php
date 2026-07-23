@@ -238,7 +238,7 @@ class SmsSendService implements SmsSendServiceInterface
     {
         $provider = $this->smsProviderRepository->findDefaultActive();
 
-        return $provider?->code ?? config('sms.default_provider', 'mock');
+        return $provider?->code ?? config('sms.default_provider', 'texcell');
     }
 
     private function ensureProviderMessageLength(string $message): void

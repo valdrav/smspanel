@@ -66,10 +66,14 @@ class TexcellBalanceSyncService
 
     public function syncDefault(?User $actingUser = null): SmsBalanceResult
     {
+        if (! app()->environment('testing')) {
+            app(EnsureTexcellProvider::class)->ensure();
+        }
+
         $provider = $this->resolveTexcellProvider();
 
         if ($provider === null) {
-            return new SmsBalanceResult(success: false, errorMessage: 'Aktif Texcell sağlayıcısı yok. SMS Sağlayıcılar’dan ekleyin.');
+            return new SmsBalanceResult(success: false, errorMessage: 'Aktif Texcell sağlayıcısı yok.');
         }
 
         return $this->syncProvider($provider, $actingUser);

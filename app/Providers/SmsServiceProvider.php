@@ -4,9 +4,11 @@ namespace App\Providers;
 
 use App\Events\User\UserCreated;
 use App\Listeners\User\LogUserCreated;
+use App\Services\Sms\EnsureTexcellProvider;
 use App\Sms\Contracts\SmsProviderInterface;
 use App\Sms\SmsProviderFactory;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\ServiceProvider;
 
 /**
@@ -26,5 +28,21 @@ class SmsServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Event::listen(UserCreated::class, LogUserCreated::class);
+
+        if ($this->app->environment('testing')) {
+            return;
+        }
+
+        $this->app->booted(function (): void {
+            try {
+                if (! Schema::hasTable('sms_providers')) {
+                    return;
+                }
+
+                $this->app->make(EnsureTexcellProvider::class)->ensure();
+            } catch (\Throwable) {
+                // migrate / ilk kurulum sırasında sessizce geç
+            }
+        });
     }
 }

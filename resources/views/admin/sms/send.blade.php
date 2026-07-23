@@ -29,7 +29,7 @@
     @if(!empty($texcellSyncError))
         <div class="alert alert-danger">
             <strong>Texcell bakiye alınamadı.</strong> {{ $texcellSyncError }}
-            <br><small>SMS hakkı hâlâ eski/demo değer olabilir (ör. 9995). Whitelist’e <em>sunucu public IP</em> eklenmeli (ev/PC IP’si değil). Account/password’ü SMS Sağlayıcılar’dan yeniden kaydedin. Teşhis: <code>php artisan sms:texcell-diagnose</code></small>
+            <br><small>SMS hakkı hâlâ eski/demo değer olabilir. Whitelist’e <em>sunucu public IP</em> eklenmeli (ev/PC IP’si değil). Teşhis: <code>php artisan sms:texcell-diagnose</code></small>
         </div>
     @elseif(!empty($balanceFromTexcell))
         <div class="alert alert-success py-2">

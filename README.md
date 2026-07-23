@@ -120,15 +120,24 @@ gh repo create smspanel --private --source=. --remote=origin --push
 
 ### Texcell EIMS
 
-Önce hazır sağlayıcı kaydını oluşturun:
+Tek sağlayıcıdır; hesap bilgileri `config/sms.php` / `.env` üzerinden gelir.
+Panelden tekrar kaydetmeniz gerekmez:
 
 ```bash
-php artisan db:seed --class=SmsProviderSeeder --force
+php artisan migrate --force
+php artisan sms:texcell-install
+# veya sadece teşhis:
+php artisan sms:texcell-diagnose
 ```
 
-Ardından Süper Yönetici → **SMS API Ayarları** ekranında Texcell kaydını
-düzenleyin. Account, password ve HTTP base URL (`http://IP:20003`) girin;
-sağlayıcıyı **Aktif + Varsayılan** yapın. Şifre şifreli saklanır.
+Kurulum `texcell` kaydını DB’ye yazar, **Aktif + Varsayılan** yapar, diğer
+sağlayıcıları (mock vb.) pasifleştirir ve bakiyeyi `/getbalance` ile çeker.
+
+Boş `TEXCELL_ACCOUNT` / `TEXCELL_PASSWORD` üretimde varsayılan hesaba düşer.
+`TEXCELL_BASE_URL` varsayılanı: `http://38.150.64.36:20003`.
+
+Texcell “Authentication failure” dönerse whitelist’e **sunucu public IP**
+ekleyin (ev/PC IP değil).
 
 SMS paneli hakları paket ile paylaştırılır:
 1. Paket oluşturun (Paket Yönetimi)

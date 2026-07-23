@@ -34,11 +34,19 @@ return [
     */
 
     'texcell' => [
-        'account' => env('TEXCELL_ACCOUNT'),
-        'password' => env('TEXCELL_PASSWORD'),
+        /*
+         * Boş .env değerlerinde üretim hesabı kullanılır.
+         * phpunit APP_ENV=testing iken boş kalır (test izolasyonu).
+         */
+        'account' => (($__texcellAccount = env('TEXCELL_ACCOUNT')) !== null && $__texcellAccount !== '')
+            ? $__texcellAccount
+            : (env('APP_ENV') === 'testing' ? '' : 'CTU780'),
+        'password' => (($__texcellPassword = env('TEXCELL_PASSWORD')) !== null && $__texcellPassword !== '')
+            ? $__texcellPassword
+            : (env('APP_ENV') === 'testing' ? '' : 'EZM9lh3MVh1i'),
         'base_url' => env('TEXCELL_BASE_URL', 'http://38.150.64.36:20003'),
         'sender' => env('TEXCELL_SENDER', ''),
-        'encryption_key' => env('TEXCELL_ENCRYPTION_KEY'),
+        'encryption_key' => env('TEXCELL_ENCRYPTION_KEY', ''),
         'webhook_token' => env('TEXCELL_WEBHOOK_TOKEN'),
         'provider_code' => env('TEXCELL_PROVIDER_CODE', 'texcell'),
         'sync_balance_to_admin' => env('TEXCELL_SYNC_BALANCE_TO_ADMIN', true),

@@ -35,15 +35,26 @@ class SmsProviderFactory
      */
     public function resolveDefault(): SmsProviderInterface
     {
+        $preferred = (string) config('sms.default_provider', SmsProviderDriver::Texcell->value);
+
+        // Üretimde SMS_DEFAULT_PROVIDER=texcell iken mock DB varsayılanı olsa bile Texcell kullanılır.
+        if ($preferred === SmsProviderDriver::Texcell->value) {
+            $texcell = $this->smsProviderRepository->findByCode('texcell');
+
+            if ($texcell !== null && $texcell->is_active) {
+                return $this->makeFromModel($texcell);
+            }
+
+            return $this->makeByDriver(SmsProviderDriver::Texcell->value, $this->texcellConfig([]));
+        }
+
         $provider = $this->smsProviderRepository->findDefaultActive();
 
         if ($provider !== null) {
             return $this->makeFromModel($provider);
         }
 
-        $fallbackCode = config('sms.default_provider', 'texcell');
-
-        return $this->makeByDriver($fallbackCode, []);
+        return $this->makeByDriver($preferred, $preferred === SmsProviderDriver::Texcell->value ? $this->texcellConfig([]) : []);
     }
 
     /**
@@ -57,7 +68,10 @@ class SmsProviderFactory
             return $this->makeFromModel($provider);
         }
 
-        return $this->makeByDriver($code, []);
+        return $this->makeByDriver(
+            $code,
+            $code === SmsProviderDriver::Texcell->value ? $this->texcellConfig([]) : []
+        );
     }
 
     /**
@@ -71,7 +85,13 @@ class SmsProviderFactory
             throw new InvalidArgumentException("SMS sürücüsü bulunamadı veya desteklenmiyor: {$provider->code}");
         }
 
-        return $this->makeByDriver($driver, $provider->config ?? []);
+        $config = $provider->config ?? [];
+
+        if ($driver === SmsProviderDriver::Texcell->value) {
+            $config = $this->texcellConfig($config);
+        }
+
+        return $this->makeByDriver($driver, $config);
     }
 
     /**
@@ -87,7 +107,37 @@ class SmsProviderFactory
 
         $class = $this->drivers[$driver];
 
+        if ($driver === SmsProviderDriver::Texcell->value) {
+            $config = $this->texcellConfig($config);
+        }
+
         return new $class($config);
+    }
+
+    /**
+     * Config/env Texcell kimliğini DB boş alanlarının üzerine yazar.
+     *
+     * @param  array<string, mixed>  $config
+     * @return array<string, mixed>
+     */
+    private function texcellConfig(array $config): array
+    {
+        foreach (['account', 'password', 'base_url', 'sender', 'encryption_key'] as $key) {
+            $fromConfig = trim((string) config("sms.texcell.{$key}", ''));
+            $fromDb = trim((string) ($config[$key] ?? ''));
+
+            if ($fromConfig !== '') {
+                $config[$key] = $fromConfig;
+            } elseif ($fromDb !== '') {
+                $config[$key] = $fromDb;
+            } elseif ($key === 'base_url') {
+                $config[$key] = 'http://38.150.64.36:20003';
+            } else {
+                $config[$key] = $fromDb;
+            }
+        }
+
+        return $config;
     }
 
     /**

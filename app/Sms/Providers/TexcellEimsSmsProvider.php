@@ -453,12 +453,25 @@ class TexcellEimsSmsProvider extends AbstractSmsProvider
 
     private function account(): string
     {
-        return trim((string) $this->config('account', config('sms.texcell.account')));
+        return $this->credential('account');
     }
 
     private function password(): string
     {
-        return trim((string) $this->config('password', config('sms.texcell.password')));
+        return $this->credential('password');
+    }
+
+    /**
+     * DB’de boş string varsa config/env kullanılır.
+     */
+    private function credential(string $key): string
+    {
+        $fromInstance = trim((string) ($this->config[$key] ?? ''));
+        if ($fromInstance !== '') {
+            return $fromInstance;
+        }
+
+        return trim((string) config("sms.texcell.{$key}", ''));
     }
 
     /**
