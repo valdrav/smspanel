@@ -13,7 +13,6 @@ use Illuminate\Support\Facades\Http;
  */
 class DiagnoseTexcellCommand extends Command
 {
-    /** Texcell’den gelen bilinen hesap şifresi (parmak izi karşılaştırması). */
     private const EXPECTED_PASSWORD = 'EZM9lh3MVh1i';
 
     private const EXPECTED_ACCOUNT = 'CTU780';
@@ -23,7 +22,7 @@ class DiagnoseTexcellCommand extends Command
                             {--password= : Geçici password (DB/config yerine)}
                             {--base-url= : Geçici base URL}
                             {--skip-ensure : DB düzeltmesini atla}
-                            {--force-known : Bilinen CTU780 şifresini zorla dene (env/DB yok say)}';
+                            {--force-known : Bilinen CTU780 şifresini zorla dene}';
 
     protected $description = 'Texcell’i DB’ye yazar, getbalance test eder, şifre/IP teşhisi yapar';
 
@@ -57,7 +56,6 @@ class DiagnoseTexcellCommand extends Command
         }
 
         $publicIp = $this->detectPublicIp();
-        $passwordSource = $this->detectPasswordSource($password);
         $fp = $this->fingerprint($password);
         $expectedFp = $this->fingerprint(self::EXPECTED_PASSWORD);
         $passwordMatchesKnown = hash_equals($expectedFp, $fp);
@@ -70,7 +68,7 @@ class DiagnoseTexcellCommand extends Command
         $this->line('Base URL: '.$baseUrl);
         $this->line('Account: '.($account !== '' ? $account : '(BOŞ)').($accountMatchesKnown ? ' (bilinen CTU780 ile aynı)' : ' (bilinen CTU780’den FARKLI)'));
         $this->line('Password uzunluk: '.strlen($password).($password === '' ? ' (BOŞ!)' : ''));
-        $this->line('Password kaynağı: '.$passwordSource);
+        $this->line('Password kaynağı: '.$this->detectPasswordSource($password));
         $this->line('Password parmak izi: '.$fp.($passwordMatchesKnown ? ' → bilinen şifre ile AYNI' : ' → bilinen şifreden FARKLI ('.$expectedFp.')'));
         $this->line('Encryption key: '.(trim((string) ($resolved['encryption_key'] ?? '')) !== '' ? 'DOLU' : 'boş'));
         $this->line('Sunucu public IP: '.($publicIp ?? '(alınamadı)'));
@@ -83,47 +81,51 @@ class DiagnoseTexcellCommand extends Command
         }
 
         if ($model->driverValue() !== SmsProviderDriver::Texcell->value || $model->code !== 'texcell') {
-            $this->error('DB hâlâ Texcell değil. php artisan optimize:clear');
+            $this->error('DB hâlâ Texcell değil.');
 
             return self::FAILURE;
         }
 
         $this->info('Kimlik denemeleri (şifre yazdırılmaz):');
-        $attempts = [
-            'plain GET' => ['account' => $account, 'password' => $password],
-            'version=1.0' => ['account' => $account, 'password' => $password, 'version' => '1.0'],
-            'md5(password)' => ['account' => $account, 'password' => md5($password)],
-            'yanlış şifre kontrol' => ['account' => $account, 'password' => 'WRONG_PASSWORD_TEST_'.time()],
+
+        $probes = [
+            ['label' => 'plain GET', 'mode' => 'get', 'params' => ['account' => $account, 'password' => $password]],
+            ['label' => 'GET + json CT', 'mode' => 'get_json_ct', 'params' => ['account' => $account, 'password' => $password]],
+            ['label' => 'POST JSON body', 'mode' => 'post_json', 'params' => ['account' => $account, 'password' => $password]],
+            ['label' => 'version=1.0', 'mode' => 'get', 'params' => ['account' => $account, 'password' => $password, 'version' => '1.0']],
+            ['label' => 'yanlış şifre kontrol', 'mode' => 'get', 'params' => ['account' => $account, 'password' => 'WRONG_PASSWORD_TEST_'.time()]],
         ];
 
-        if (! $passwordMatchesKnown) {
-            $attempts['bilinen şifre zorla'] = [
-                'account' => self::EXPECTED_ACCOUNT,
-                'password' => self::EXPECTED_PASSWORD,
-            ];
-        }
-
         $plainStatus = null;
+        $wrongStatus = null;
 
-        foreach ($attempts as $label => $params) {
-            $result = $this->probeGetbalance($baseUrl, $params);
+        foreach ($probes as $probe) {
+            $result = $this->probeGetbalance($baseUrl, $probe['params'], $probe['mode']);
             $this->line(sprintf(
                 '  %-22s HTTP %s status=%s %s',
-                $label,
+                $probe['label'],
                 $result['http'],
                 $result['status'] === null ? '?' : (string) $result['status'],
                 $result['desc']
             ));
 
-            if ($label === 'plain GET') {
+            if ($probe['label'] === 'plain GET') {
                 $plainStatus = $result['status'];
+            }
+            if ($probe['label'] === 'yanlış şifre kontrol') {
+                $wrongStatus = $result['status'];
             }
 
             if ($result['status'] === 0) {
                 $this->newLine();
-                $this->info('OK — Bu varyant çalıştı: '.$label);
-                $workingPassword = (string) $params['password'];
-                $this->persistWorkingCredentials($ensure, $model, (string) $params['account'], $workingPassword, $baseUrl);
+                $this->info('OK — Bu varyant çalıştı: '.$probe['label']);
+                $this->persistWorkingCredentials(
+                    $ensure,
+                    $model,
+                    (string) $probe['params']['account'],
+                    (string) $probe['params']['password'],
+                    $baseUrl
+                );
                 $sync = $syncService->syncProvider($model->fresh() ?? $model);
                 $this->line($sync->success
                     ? 'Panel SMS hakkı: '.(int) floor((float) $sync->balance)
@@ -134,7 +136,7 @@ class DiagnoseTexcellCommand extends Command
         }
 
         $this->newLine();
-        $this->explainFailure($plainStatus, $passwordMatchesKnown, $publicIp);
+        $this->explainFailure($plainStatus, $wrongStatus, $passwordMatchesKnown, $publicIp);
 
         return self::FAILURE;
     }
@@ -143,12 +145,19 @@ class DiagnoseTexcellCommand extends Command
      * @param  array<string, scalar>  $params
      * @return array{http: int|string, status: int|null, desc: string}
      */
-    private function probeGetbalance(string $baseUrl, array $params): array
+    private function probeGetbalance(string $baseUrl, array $params, string $mode = 'get'): array
     {
         try {
-            $response = Http::timeout(30)
-                ->withHeaders(['Accept' => 'application/json'])
-                ->get($baseUrl.'/getbalance', $params);
+            $url = $baseUrl.'/getbalance';
+            $response = match ($mode) {
+                'post_json' => Http::timeout(30)
+                    ->withBody(json_encode($params, JSON_UNESCAPED_UNICODE) ?: '{}', 'application/json;charset=utf-8')
+                    ->post($url),
+                'get_json_ct' => Http::timeout(30)
+                    ->withHeaders(['Content-Type' => 'application/json;charset=utf-8'])
+                    ->get($url, $params),
+                default => Http::timeout(30)->get($url, $params),
+            };
         } catch (\Throwable $e) {
             return ['http' => 'ERR', 'status' => null, 'desc' => $e->getMessage()];
         }
@@ -166,7 +175,7 @@ class DiagnoseTexcellCommand extends Command
         ];
     }
 
-    private function explainFailure(?int $plainStatus, bool $passwordMatchesKnown, ?string $publicIp): void
+    private function explainFailure(?int $plainStatus, ?int $wrongStatus, bool $passwordMatchesKnown, ?string $publicIp): void
     {
         if ($plainStatus === -2) {
             $this->error('IP whitelist’te değil (-2). Verin: '.($publicIp ?? '?'));
@@ -174,18 +183,26 @@ class DiagnoseTexcellCommand extends Command
             return;
         }
 
-        if ($plainStatus === -1) {
-            $this->error('PDF’e göre -1 = authentication error (hesap/şifre). -2 olsaydı IP kısıtı olurdu.');
+        if ($plainStatus === -1 && $wrongStatus === -1) {
+            $this->error('SONUÇ: Şifre paneli tarafında DOĞRU — sorun şifre değil.');
+            $this->warn('Doğru şifre ve bilerek yanlış şifre AYNI -1 → Texcell şifreyi ayırt etmiyor.');
+            $this->warn('Muhtemel: IP hâlâ kabul edilmiyor (-1 olarak), hesap kapalı/kilitli, veya hesap yetkisiz.');
+            $this->newLine();
+            $this->info('Texcell desteğine kopyalayın:');
+            $this->line('Account: CTU780');
+            $this->line('Server outbound IP: '.($publicIp ?? '195.85.207.224'));
+            $this->line('GET http://38.150.64.36:20003/getbalance → status -1 Authentication failure');
+            $this->line('Issued password is used; wrong password returns the same -1.');
+            $this->line('Please verify whitelist for this IP and that the account is enabled.');
 
-            if ($passwordMatchesKnown) {
-                $this->warn('Paneldeki şifre, size verilen bilinen şifre ile AYNI görünüyor.');
-                $this->warn('Olasılıklar: 1) Texcell hesabı/şifresi panelde farklı  2) Whitelist henüz aktif değil / yanlış IP  3) Hesap kilitli');
-                $this->warn('Texcell’e sorun: CTU780 + IP '.$publicIp.' için getbalance neden -1?');
-            } else {
-                $this->warn('Kullanılan şifre bilinen şifreden FARKLI. .env TEXCELL_PASSWORD veya DB yanlış olabilir.');
-                $this->warn('Düzeltmek için: php artisan sms:texcell-diagnose --force-known');
-                $this->warn('veya: php artisan sms:texcell-diagnose --password="DOGRU_SIFRE"');
-            }
+            return;
+        }
+
+        if ($plainStatus === -1) {
+            $this->error('PDF’e göre -1 = authentication error.');
+            $this->warn($passwordMatchesKnown
+                ? 'Şifre bilinen değerle aynı. Texcell’e CTU780 + IP '.$publicIp.' sorun.'
+                : 'Şifre farklı — --force-known deneyin.');
 
             return;
         }
@@ -200,7 +217,6 @@ class DiagnoseTexcellCommand extends Command
         string $password,
         string $baseUrl,
     ): void {
-        // md5 denemesi çalıştıysa ham şifreyi bilmiyoruz — sadece plain/bilinen kaydet
         if (strlen($password) === 32 && ctype_xdigit($password)) {
             $this->warn('md5 varyantı çalıştı; ham şifreyi Texcell’den doğrulayın.');
 
