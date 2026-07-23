@@ -11,34 +11,36 @@ return [
     |
     */
 
-    'default_provider' => env('SMS_DEFAULT_PROVIDER', 'mock'),
+    'default_provider' => env('SMS_DEFAULT_PROVIDER', 'texcell'),
 
     'drivers' => [
         'mock' => \App\Sms\Providers\MockSmsProvider::class,
         'netgsm' => \App\Sms\Providers\NetgsmSmsProvider::class,
         'iletimerkezi' => \App\Sms\Providers\IletiMerkeziSmsProvider::class,
-        'easysendsms' => \App\Sms\Providers\EasySendSmsProvider::class,
+        'texcell' => \App\Sms\Providers\TexcellEimsSmsProvider::class,
     ],
 
     'default_sender_id' => env('SMS_DEFAULT_SENDER_ID', 'SMSPANEL'),
 
     /*
     |--------------------------------------------------------------------------
-    | EasySendSMS REST API v1
+    | Texcell / EJOIN EIMS HTTP API v3.5
     |--------------------------------------------------------------------------
     |
-    | @see https://www.easysendsms.com/rest-api
-    | Base host: https://restapi.easysendsms.app
-    | Send:  POST /v1/rest/sms/send   (header: apikey)
-    | Balance: GET /v1/rest/sms/balance (header: APIKEY)
-    | Max 30 recipients per send request.
+    | Charge Rule: Send billing (gönderim anında ücretlendirme).
+    | Endpoints: /getbalance, /sendsms, /getreport, /getsms, /smsjob
+    | DLR push: PUT /api/webhooks/texcell/{token}/report
     |
     */
 
-    'easysendsms' => [
-        'api_key' => env('EASYSENDSMS_API_KEY'),
-        'sender_id' => env('EASYSENDSMS_SENDER_ID', env('SMS_DEFAULT_SENDER_ID', 'SMSPANEL')),
-        'base_url' => env('EASYSENDSMS_BASE_URL', 'https://restapi.easysendsms.app/v1/rest'),
+    'texcell' => [
+        'account' => env('TEXCELL_ACCOUNT'),
+        'password' => env('TEXCELL_PASSWORD'),
+        'base_url' => env('TEXCELL_BASE_URL', 'http://38.150.64.36:20003'),
+        'sender' => env('TEXCELL_SENDER', env('SMS_DEFAULT_SENDER_ID', 'SMSPANEL')),
+        'encryption_key' => env('TEXCELL_ENCRYPTION_KEY'),
+        'webhook_token' => env('TEXCELL_WEBHOOK_TOKEN'),
+        'provider_code' => env('TEXCELL_PROVIDER_CODE', 'texcell'),
     ],
 
     /*

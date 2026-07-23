@@ -51,25 +51,26 @@ class SmsProviderManagementTest extends TestCase
         $this->assertDatabaseHas('sms_providers', ['code' => 'netgsm-main']);
     }
 
-    public function test_factory_resolves_mock_provider(): void
+    public function test_factory_resolves_texcell_as_default_provider(): void
     {
         $this->seed(SmsProviderSeeder::class);
 
         $provider = app(\App\Sms\SmsProviderFactory::class)->resolveDefault();
 
-        $this->assertSame('mock', $provider->getName());
+        $this->assertSame('texcell', $provider->getName());
     }
 
-    public function test_easysendsms_api_key_is_not_rendered_and_blank_update_preserves_it(): void
+    public function test_texcell_password_is_not_rendered_and_blank_update_preserves_it(): void
     {
         $provider = SmsProvider::create([
-            'code' => 'easysendsms',
-            'name' => 'EasySendSMS',
-            'driver' => 'easysendsms',
+            'code' => 'texcell',
+            'name' => 'Texcell EIMS',
+            'driver' => 'texcell',
             'config' => [
-                'api_key' => 'very-secret-key',
-                'sender_id' => 'INOVAPP',
-                'base_url' => 'https://restapi.easysendsms.app/v1/rest',
+                'account' => 'CTU780',
+                'password' => 'very-secret-pass',
+                'base_url' => 'http://38.150.64.36:20003',
+                'sender' => 'INOVAPP',
             ],
             'is_active' => true,
             'is_default' => true,
@@ -79,15 +80,16 @@ class SmsProviderManagementTest extends TestCase
         $this->actingAs($this->admin)
             ->get(route('admin.sms-providers.edit', $provider))
             ->assertOk()
-            ->assertDontSee('very-secret-key');
+            ->assertDontSee('very-secret-pass');
 
         $this->actingAs($this->admin)->put(route('admin.sms-providers.update', $provider), [
-            'name' => 'EasySendSMS',
-            'driver' => 'easysendsms',
+            'name' => 'Texcell EIMS',
+            'driver' => 'texcell',
             'config' => [
-                'api_key' => '',
-                'sender_id' => 'NEWSENDER',
-                'base_url' => 'https://restapi.easysendsms.app/v1/rest',
+                'account' => 'CTU780',
+                'password' => '',
+                'base_url' => 'http://38.150.64.36:20003',
+                'sender' => 'NEWSENDER',
             ],
             'is_active' => true,
             'is_default' => true,
@@ -95,7 +97,7 @@ class SmsProviderManagementTest extends TestCase
         ])->assertRedirect(route('admin.sms-providers.index'));
 
         $provider->refresh();
-        $this->assertSame('very-secret-key', $provider->config['api_key']);
-        $this->assertSame('NEWSENDER', $provider->config['sender_id']);
+        $this->assertSame('very-secret-pass', $provider->config['password']);
+        $this->assertSame('NEWSENDER', $provider->config['sender']);
     }
 }

@@ -1,8 +1,10 @@
 <?php
 
+use App\Console\Commands\PollTexcellDeliveryReportsCommand;
 use Database\Seeders\SmsPackageSeeder;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Schedule;
 
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
@@ -17,3 +19,7 @@ Artisan::command('smspanel:seed-packages', function () {
     Artisan::call('db:seed', ['--class' => SmsPackageSeeder::class, '--force' => true]);
     $this->info('Tamam: örnek SMS paketleri hazır.');
 })->purpose('Paket migration + örnek paketleri yükler');
+
+Schedule::command(PollTexcellDeliveryReportsCommand::class)
+    ->everyFiveMinutes()
+    ->withoutOverlapping();

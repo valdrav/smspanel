@@ -13,8 +13,9 @@ class SmsProviderSeeder extends Seeder
 {
     public function run(): void
     {
-        $apiKey = (string) config('sms.easysendsms.api_key', '');
-        $easySendSmsEnabled = $apiKey !== '';
+        $texcellAccount = trim((string) config('sms.texcell.account', ''));
+        $texcellPassword = (string) config('sms.texcell.password', '');
+        $texcellEnabled = $texcellAccount !== '' && $texcellPassword !== '';
 
         SmsProvider::firstOrCreate(
             ['code' => 'mock'],
@@ -22,44 +23,51 @@ class SmsProviderSeeder extends Seeder
                 'name' => 'Mock Sağlayıcı (Test)',
                 'driver' => SmsProviderDriver::Mock->value,
                 'config' => [],
-                'is_active' => true,
-                'is_default' => ! $easySendSmsEnabled,
+                'is_active' => ! $texcellEnabled,
+                'is_default' => false,
                 'priority' => 100,
             ]
         );
 
-        $easySendSms = SmsProvider::firstOrCreate(
-            ['code' => 'easysendsms'],
+        /** @var SmsProvider|null $existing */
+        $existing = SmsProvider::query()->where('code', 'texcell')->first();
+        $existingConfig = $existing?->config ?? [];
+
+        $config = [
+            'account' => $texcellEnabled ? $texcellAccount : (string) ($existingConfig['account'] ?? ''),
+            'password' => $texcellEnabled ? $texcellPassword : (string) ($existingConfig['password'] ?? ''),
+            'base_url' => (string) config('sms.texcell.base_url'),
+            'sender' => (string) ($existingConfig['sender'] ?? config('sms.texcell.sender', '')),
+            'encryption_key' => $texcellEnabled
+                ? (string) config('sms.texcell.encryption_key', '')
+                : (string) ($existingConfig['encryption_key'] ?? config('sms.texcell.encryption_key', '')),
+        ];
+
+        $texcell = SmsProvider::updateOrCreate(
+            ['code' => 'texcell'],
             [
-                'name' => 'EasySendSMS',
-                'driver' => SmsProviderDriver::EasySendSms->value,
-                'config' => [
-                    'api_key' => $apiKey,
-                    'sender_id' => (string) config('sms.easysendsms.sender_id', 'SMSPANEL'),
-                    'base_url' => (string) config('sms.easysendsms.base_url'),
-                ],
-                'is_active' => $easySendSmsEnabled,
-                'is_default' => $easySendSmsEnabled,
+                'name' => 'Texcell EIMS',
+                'driver' => SmsProviderDriver::Texcell->value,
+                'config' => $config,
+                'is_active' => true,
+                'is_default' => true,
                 'priority' => 1,
             ]
         );
 
-        // Panelden girilmiş anahtarı boş env değeriyle ezme.
-        if ($easySendSmsEnabled) {
-            SmsProvider::query()
-                ->whereKeyNot($easySendSms->id)
-                ->update(['is_default' => false]);
+        SmsProvider::query()
+            ->whereKeyNot($texcell->id)
+            ->update(['is_default' => false]);
 
-            $easySendSms->update([
-                'config' => [
-                    'api_key' => $apiKey,
-                    'sender_id' => (string) config('sms.easysendsms.sender_id', 'SMSPANEL'),
-                    'base_url' => (string) config('sms.easysendsms.base_url'),
-                ],
-                'is_active' => true,
-                'is_default' => true,
-                'priority' => 1,
+        // Eski EasySendSMS kaydı varsa pasifleştir.
+        SmsProvider::query()
+            ->where(function ($query): void {
+                $query->where('code', 'easysendsms')
+                    ->orWhere('driver', 'easysendsms');
+            })
+            ->update([
+                'is_active' => false,
+                'is_default' => false,
             ]);
-        }
     }
 }

@@ -69,12 +69,13 @@ class SmsProviderService implements SmsProviderServiceInterface
             }
 
             $config = $data->config;
+
             if (
-                $data->driver->value === 'easysendsms'
-                && trim((string) ($config['api_key'] ?? '')) === ''
-                && ! empty($provider->config['api_key'])
+                $data->driver->value === 'texcell'
+                && trim((string) ($config['password'] ?? '')) === ''
+                && ! empty($provider->config['password'])
             ) {
-                $config['api_key'] = $provider->config['api_key'];
+                $config['password'] = $provider->config['password'];
             }
 
             $updated = $this->smsProviderRepository->update($provider, [

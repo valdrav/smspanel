@@ -59,7 +59,7 @@
         <div class="col-md-4">
             <div class="form-group">
                 <label>Şifre</label>
-                <input type="password" name="config[password]" class="form-control" value="{{ old('config.password', $provider->config['password'] ?? '') }}">
+                <input type="password" name="config[password]" class="form-control" value="{{ old('config.password', isset($provider) && ($provider->driver->value ?? '') === 'netgsm' ? ($provider->config['password'] ?? '') : '') }}">
             </div>
         </div>
         <div class="col-md-4">
@@ -96,52 +96,65 @@
     </div>
 </div>
 
-<div id="config-easysendsms" class="driver-config border rounded p-3 mb-3">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <div>
-            <h5 class="mb-1">EasySendSMS REST API</h5>
-            <small class="text-muted">API anahtarını EasySendSMS panelindeki Account Settings → REST API bölümünden alın.</small>
-        </div>
-        <a href="https://www.easysendsms.com/rest-api" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary">
-            <i class="fas fa-external-link-alt"></i> Dokümantasyon
-        </a>
+<div id="config-texcell" class="driver-config border rounded p-3 mb-3">
+    <div class="mb-3">
+        <h5 class="mb-1">Texcell EIMS HTTP API</h5>
+        <small class="text-muted">EJOIN/Texcell HTTP v3.5 — Charge Rule: Send billing. Kimlik bilgileri şifreli saklanır.</small>
     </div>
     <div class="row">
-        <div class="col-md-5">
+        <div class="col-md-3">
             <div class="form-group">
-                <label>API Key <span class="text-danger">*</span></label>
-                <input type="password" name="config[api_key]" class="form-control"
-                    value="{{ old('config.api_key', '') }}"
-                    placeholder="{{ isset($provider) && !empty($provider->config['api_key']) ? 'Kayıtlı anahtarı değiştirmek için yeni değer girin' : 'REST API anahtarını girin' }}"
-                    autocomplete="new-password">
-                <small class="text-muted">Veritabanında şifreli saklanır ve düzenleme ekranında tekrar gösterilmez.</small>
+                <label>Account <span class="text-danger">*</span></label>
+                <input type="text" name="config[account]" class="form-control"
+                    value="{{ old('config.account', $provider->config['account'] ?? config('sms.texcell.account')) }}"
+                    autocomplete="off">
             </div>
         </div>
         <div class="col-md-3">
             <div class="form-group">
-                <label>Gönderici Başlığı <span class="text-danger">*</span></label>
-                <input type="text" name="config[sender_id]" class="form-control"
-                    value="{{ old('config.sender_id', $provider->config['sender_id'] ?? config('sms.easysendsms.sender_id')) }}"
-                    maxlength="15" placeholder="SMSPANEL">
+                <label>Password <span class="text-danger">*</span></label>
+                <input type="password" name="config[password]" class="form-control"
+                    value="{{ old('config.password', '') }}"
+                    placeholder="{{ isset($provider) && !empty($provider->config['password']) ? 'Kayıtlı şifreyi değiştirmek için yeni değer girin' : 'Hesap şifresi' }}"
+                    autocomplete="new-password">
             </div>
         </div>
-        <div class="col-md-4">
+        <div class="col-md-3">
             <div class="form-group">
-                <label>REST API Base URL</label>
+                <label>Gönderici (sender)</label>
+                <input type="text" name="config[sender]" class="form-control"
+                    value="{{ old('config.sender', $provider->config['sender'] ?? config('sms.texcell.sender')) }}"
+                    maxlength="20" placeholder="Opsiyonel">
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="form-group">
+                <label>Encryption Key</label>
+                <input type="text" name="config[encryption_key]" class="form-control"
+                    value="{{ old('config.encryption_key', $provider->config['encryption_key'] ?? '') }}"
+                    placeholder="Sunucu şifreleme isterse">
+                <small class="text-muted">Boş bırakılırsa düz şifre kullanılır.</small>
+            </div>
+        </div>
+    </div>
+    <div class="row">
+        <div class="col-md-12">
+            <div class="form-group">
+                <label>HTTP Base URL <span class="text-danger">*</span></label>
                 <input type="url" name="config[base_url]" class="form-control"
-                    value="{{ old('config.base_url', $provider->config['base_url'] ?? config('sms.easysendsms.base_url')) }}">
+                    value="{{ old('config.base_url', $provider->config['base_url'] ?? config('sms.texcell.base_url')) }}"
+                    placeholder="http://IP:20003">
             </div>
         </div>
     </div>
     <div class="alert alert-info mb-0 py-2">
         <ul class="mb-0 pl-3">
-            <li>Türkiye numaraları API'ye otomatik <strong>90XXXXXXXXXX</strong> olarak gider (<code>+</code> / <code>00</code> kullanılmaz).</li>
-            <li>Türkçe/Unicode mesajlarda <code>type=1</code>, düz metinde <code>type=0</code> otomatik seçilir.</li>
-            <li>Tek istekte en fazla <strong>30 alıcı</strong>; daha fazlası otomatik parçalanır.</li>
-            <li>Toplu gönderimler kuyrukta yüzlerce alıcıya ölçeklenir; her API isteği en fazla 30 benzersiz numara içerir.</li>
-            <li>Mesaj uzunluğu EasySendSMS kuralına göre en fazla <strong>5 segment</strong> olabilir.</li>
-            <li>Alfanumerik gönderici max <strong>11</strong>, sayısal max <strong>15</strong> karakter.</li>
-            <li>API anahtarı panelde <em>Account Settings → REST API</em> altındadır. IP kısıtı varsa sunucu IP’nizi whitelist’e ekleyin.</li>
+            <li>Gönderim: <code>POST /sendsms</code> (JSON), bakiye: <code>GET /getbalance</code>, rapor: <code>GET /getreport</code>.</li>
+            <li>Türkiye numaraları otomatik <strong>90XXXXXXXXXX</strong> formatına çevrilir.</li>
+            <li>Mesaj uzunluğu en fazla <strong>1024</strong> karakter; aynı metin için toplu gönderim tek istekte birleştirilir.</li>
+            <li>DLR push URL (Texcell paneline tanımlayın): <code>{{ url('/api/webhooks/texcell') }}/{{ config('sms.texcell.webhook_token') ?: '{TOKEN}' }}/report</code> — HTTP PUT/POST.</li>
+            <li>Push yoksa periyodik: <code>php artisan sms:texcell-poll-reports</code></li>
+            <li>IP kısıtı varsa uygulama sunucu IP’nizi Texcell whitelist’e ekleyin.</li>
         </ul>
     </div>
 </div>

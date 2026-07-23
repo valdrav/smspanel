@@ -19,6 +19,7 @@
     </source>
     <php>
         <env name="APP_ENV" value="testing"/>
+        <env name="APP_KEY" value="base64:uvRyLtZXCoxceVbprTWsZBcW/suj2XGmbl+RQ2tXbr4=" force="true"/>
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
         <env name="BCRYPT_ROUNDS" value="4"/>
         <env name="BROADCAST_CONNECTION" value="null"/>
@@ -29,7 +30,8 @@
         <env name="MAIL_MAILER" value="array"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="SMS_DEFAULT_PROVIDER" value="mock" force="true"/>
-        <env name="EASYSENDSMS_API_KEY" value="" force="true"/>
+        <env name="TEXCELL_ACCOUNT" value="" force="true"/>
+        <env name="TEXCELL_PASSWORD" value="" force="true"/>
         <env name="SESSION_DRIVER" value="array"/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>

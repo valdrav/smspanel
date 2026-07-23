@@ -67,16 +67,14 @@ SESSION_DRIVER=database
 QUEUE_CONNECTION=database
 CACHE_STORE=database
 
-SMS_DEFAULT_PROVIDER=easysendsms
+SMS_DEFAULT_PROVIDER=texcell
 SMS_QUEUE=sms
 SMS_BATCH_SIZE=1000
 ```
 
-API anahtarı ve onaylı gönderici başlığı production `.env` dosyasına yazılmak
-zorunda değildir. Süper Yönetici → **SMS API Ayarları** ekranından EasySendSMS
-kaydını düzenleyin; anahtarı ve sender ID'yi girip **Aktif** ve **Varsayılan**
-seçeneklerini işaretleyin. Ayarlar veritabanında şifreli saklanır. Aynı ekrandaki
-bakiye sorgusu SMS göndermez.
+Account / password production `.env` dosyasına yazılabilir veya Süper Yönetici →
+**SMS API Ayarları** ekranından Texcell kaydına girilir; kimlik bilgileri
+veritabanında şifreli saklanır. Aynı ekrandaki bakiye sorgusu SMS göndermez.
 
 Domain: **sms.inovapp.tr** — Document root: `.../httpdocs/public`
 

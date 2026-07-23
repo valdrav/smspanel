@@ -75,11 +75,11 @@ class CampaignService
 
         $segments = $this->segmentCalculator->calculateSegments($data['message']);
         $provider = $this->smsProviderRepository->findDefaultActive();
-        $usesEasySendSms = $provider?->driver === SmsProviderDriver::EasySendSms
-            || ($provider === null && config('sms.default_provider') === SmsProviderDriver::EasySendSms->value);
+        $usesTexcell = $provider?->driver === SmsProviderDriver::Texcell
+            || ($provider === null && config('sms.default_provider') === SmsProviderDriver::Texcell->value);
 
-        if ($usesEasySendSms && $segments > 5) {
-            throw new BusinessException('EasySendSMS mesajları en fazla 5 SMS segmenti olabilir.');
+        if ($usesTexcell && mb_strlen($data['message']) > 1024) {
+            throw new BusinessException('Texcell mesaj metni en fazla 1024 karakter olabilir.');
         }
 
         $totalCredits = $segments * $contacts->count();

@@ -103,16 +103,17 @@ class SmsSendTest extends TestCase
         $this->assertEquals(98, (float) $this->user->fresh()->sms_balance);
     }
 
-    public function test_easysendsms_bulk_uses_settings_sender_and_batches_thirty_recipients(): void
+    public function test_texcell_bulk_groups_numbers_and_batches_by_job_size(): void
     {
         SmsProvider::create([
-            'code' => 'easysendsms',
-            'name' => 'EasySendSMS',
-            'driver' => SmsProviderDriver::EasySendSms,
+            'code' => 'texcell',
+            'name' => 'Texcell EIMS',
+            'driver' => SmsProviderDriver::Texcell,
             'config' => [
-                'api_key' => 'settings-api-key',
-                'sender_id' => 'INOVAPP',
-                'base_url' => 'https://restapi.easysendsms.app/v1/rest',
+                'account' => 'CTU780',
+                'password' => 'secret',
+                'base_url' => 'http://38.150.64.36:20003',
+                'sender' => 'INOVAPP',
             ],
             'is_active' => true,
             'is_default' => true,
@@ -120,13 +121,16 @@ class SmsSendTest extends TestCase
         ]);
 
         Http::fake(function (Request $request) {
-            $recipientCount = count(explode(',', (string) $request['to']));
+            $numbers = explode(',', (string) ($request['numbers'] ?? ''));
 
             return Http::response([
-                'status' => 'OK',
-                'messageIds' => array_map(
-                    fn (int $index) => 'OK: message-'.$index,
-                    range(1, $recipientCount),
+                'status' => 0,
+                'success' => count($numbers),
+                'fail' => 0,
+                'array' => array_map(
+                    fn (string $number, int $index) => [$number, $index + 1],
+                    $numbers,
+                    array_keys($numbers),
                 ),
             ]);
         });
@@ -148,8 +152,9 @@ class SmsSendTest extends TestCase
         $this->assertCount(2, Http::recorded());
         $this->assertEquals(40, (float) $this->user->fresh()->sms_balance);
 
-        Http::assertSent(fn (Request $request): bool => $request->hasHeader('apikey', 'settings-api-key')
-            && $request['from'] === 'INOVAPP'
-            && count(explode(',', (string) $request['to'])) === 30);
+        Http::assertSent(fn (Request $request): bool => str_contains($request->url(), '/sendsms')
+            && ($request['account'] ?? null) === 'CTU780'
+            && ($request['sender'] ?? null) === 'INOVAPP'
+            && count(explode(',', (string) ($request['numbers'] ?? ''))) === 30);
     }
 }

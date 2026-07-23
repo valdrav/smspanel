@@ -110,7 +110,7 @@ gh repo create smspanel --private --source=. --remote=origin --push
 
 | Değişken | Açıklama |
 |----------|----------|
-| `SMS_DEFAULT_PROVIDER` | `mock`, `netgsm`, `iletimerkezi`, `easysendsms` |
+| `SMS_DEFAULT_PROVIDER` | `texcell`, `mock`, `netgsm`, `iletimerkezi` |
 | `SMS_QUEUE` | Kuyruk adı (varsayılan: `sms`) |
 | `SMS_BATCH_SIZE` | Manuel toplu gönderim limiti (varsayılan: `1000`) |
 | `SMS_DISPATCH_MODE` | `auto` / `sync` / `queue` (varsayılan: `auto`) |
@@ -118,7 +118,7 @@ gh repo create smspanel --private --source=. --remote=origin --push
 | `SMS_CAMPAIGN_MAX_RECIPIENTS` | Kampanya max alıcı (200000) |
 | `QUEUE_CONNECTION` | `database` (Plesk'te önerilir) |
 
-### EasySendSMS
+### Texcell EIMS
 
 Önce hazır sağlayıcı kaydını oluşturun:
 
@@ -126,9 +126,9 @@ gh repo create smspanel --private --source=. --remote=origin --push
 php artisan db:seed --class=SmsProviderSeeder --force
 ```
 
-Ardından Süper Yönetici → **SMS API Ayarları** ekranında EasySendSMS kaydını
-düzenleyin. API anahtarı ile onaylı gönderici başlığını girin ve sağlayıcıyı
-**Aktif + Varsayılan** yapın. Anahtar şifreli saklanır.
+Ardından Süper Yönetici → **SMS API Ayarları** ekranında Texcell kaydını
+düzenleyin. Account, password ve HTTP base URL (`http://IP:20003`) girin;
+sağlayıcıyı **Aktif + Varsayılan** yapın. Şifre şifreli saklanır.
 
 SMS paneli hakları paket ile paylaştırılır:
 1. Paket oluşturun (Paket Yönetimi)
@@ -137,7 +137,6 @@ SMS paneli hakları paket ile paylaştırılır:
 3. Gönderimde hak düşer; başarısız gönderimde iade edilir
 
 Manuel toplu gönderimde 1000, kampanyalarda 200.000 alıcı desteklenir.
-EasySendSMS'e her API isteğinde en fazla 30 benzersiz numara gönderilir.
 `SMS_DISPATCH_MODE=auto` iken 300'e kadar alıcı worker beklemeden anında
 gönderilir; daha büyük işler ve kampanyalar `sms` kuyruğunu kullanır.
 

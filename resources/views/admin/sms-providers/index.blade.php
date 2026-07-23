@@ -13,9 +13,9 @@
 @section('content')
     @include('admin.partials.alerts')
     <div class="alert alert-info">
-        <strong>SMS API yapılandırması:</strong> EasySendSMS kaydını düzenleyip API anahtarı ile onaylı
-        gönderici başlığını girin; ardından kaydı <strong>Aktif</strong> ve <strong>Varsayılan</strong>
-        yapın. “Bakiye Sorgula” işlemi SMS göndermez ve deneme hakkınızı tüketmez.
+        <strong>SMS API yapılandırması:</strong> Texcell EIMS kaydını düzenleyip account / password
+        ve HTTP base URL bilgisini girin; ardından kaydı <strong>Aktif</strong> ve <strong>Varsayılan</strong>
+        yapın. “Bakiye Sorgula” işlemi SMS göndermez.
     </div>
     <div class="card">
         <div class="card-body table-responsive p-0">

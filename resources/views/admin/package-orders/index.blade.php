@@ -15,7 +15,7 @@
                     <p class="text-muted mb-3">
                         Müşteriye veya yöneticiye paket seçerek SMS hakkı yükleyin.
                         Kullanıcının organizasyonu varsa hak organizasyon bakiyesine eklenir; yoksa kişisel bakiyeye yazılır.
-                        Gönderimde bu haklar düşer; EasySendSMS sağlayıcı kredisi ayrıdır.
+                        Gönderimde bu haklar düşer; Texcell sağlayıcı kredisi ayrıdır.
                     </p>
                     <div class="form-row">
                         <div class="col-md-4 mb-2">
