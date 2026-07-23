@@ -22,7 +22,7 @@
             <label>Sürücü <span class="text-danger">*</span></label>
             <select name="driver" id="driver-select" class="form-control" required>
                 @foreach ($drivers as $driver)
-                    <option value="{{ $driver->value }}" @selected(old('driver', $provider->driverValue() ?? 'texcell') === $driver->value)>{{ $driver->label() }}</option>
+                    <option value="{{ $driver->value }}" @selected(old('driver', isset($provider) ? ($provider->driverValue() ?: 'texcell') : 'texcell') === $driver->value)>{{ $driver->label() }}</option>
                 @endforeach
             </select>
         </div>
@@ -59,7 +59,7 @@
         <div class="col-md-4">
             <div class="form-group">
                 <label>Şifre</label>
-                <input type="password" name="config[password]" class="form-control" value="{{ old('config.password', isset($provider) && ($provider->driver->value ?? '') === 'netgsm' ? ($provider->config['password'] ?? '') : '') }}">
+                <input type="password" name="config[password]" class="form-control" value="{{ old('config.password', isset($provider) && ($provider->driverValue() === 'netgsm') ? ($provider->config['password'] ?? '') : '') }}">
             </div>
         </div>
         <div class="col-md-4">
@@ -78,7 +78,7 @@
             <div class="form-group">
                 <label>API Key</label>
                 <input type="text" name="config[api_key]" class="form-control"
-                    value="{{ old('config.api_key', isset($provider) && $provider->driver->value === 'iletimerkezi' ? ($provider->config['api_key'] ?? '') : '') }}">
+                    value="{{ old('config.api_key', isset($provider) && $provider->driverValue() === 'iletimerkezi' ? ($provider->config['api_key'] ?? '') : '') }}">
             </div>
         </div>
         <div class="col-md-4">

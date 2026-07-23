@@ -35,6 +35,14 @@ class SmsProviderManagementTest extends TestCase
         $response->assertSee('Mock Sağlayıcı');
     }
 
+    public function test_admin_can_view_create_sms_provider_form(): void
+    {
+        $this->actingAs($this->admin)
+            ->get(route('admin.sms-providers.create'))
+            ->assertOk()
+            ->assertSee('Texcell EIMS');
+    }
+
     public function test_admin_can_create_sms_provider(): void
     {
         $response = $this->actingAs($this->admin)->post(route('admin.sms-providers.store'), [
