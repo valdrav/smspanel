@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\Http;
  */
 class DiagnoseTexcellCommand extends Command
 {
-    private const EXPECTED_PASSWORD = 'EZM9lh3MVh1i';
+    private const EXPECTED_PASSWORD = 'HzCzaRmBLAUt9';
 
     private const EXPECTED_ACCOUNT = 'CTU780';
 

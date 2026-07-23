@@ -102,7 +102,7 @@ class EnsureTexcellProvider
             ),
             'password' => $this->nonEmpty(
                 (string) config('sms.texcell.password', ''),
-                'EZM9lh3MVh1i'
+                'HzCzaRmBLAUt9'
             ),
             'base_url' => rtrim($this->nonEmpty(
                 (string) config('sms.texcell.base_url', ''),

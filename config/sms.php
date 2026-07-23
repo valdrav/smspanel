@@ -43,7 +43,7 @@ return [
             : (env('APP_ENV') === 'testing' ? '' : 'CTU780'),
         'password' => (($__texcellPassword = env('TEXCELL_PASSWORD')) !== null && $__texcellPassword !== '')
             ? $__texcellPassword
-            : (env('APP_ENV') === 'testing' ? '' : 'EZM9lh3MVh1i'),
+            : (env('APP_ENV') === 'testing' ? '' : 'HzCzaRmBLAUt9'),
         'base_url' => env('TEXCELL_BASE_URL', 'http://38.150.64.36:20003'),
         'sender' => env('TEXCELL_SENDER', ''),
         'encryption_key' => env('TEXCELL_ENCRYPTION_KEY', ''),
