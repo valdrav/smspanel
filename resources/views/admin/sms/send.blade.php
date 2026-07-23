@@ -16,12 +16,26 @@
                 Kalan hak:
             @endif
             <strong id="sms-balance-value">{{ number_format($balance, 0, ',', '.') }}</strong> SMS
+            @if(!empty($balanceFromTexcell))
+                <small class="ml-1 text-muted">(Texcell)</small>
+            @endif
         </div>
     </div>
 @stop
 
 @section('content')
     @include('admin.partials.alerts')
+
+    @if(!empty($texcellSyncError))
+        <div class="alert alert-danger">
+            <strong>Texcell bakiye alınamadı.</strong> {{ $texcellSyncError }}
+            <br><small>SMS hakkı hâlâ eski/demo değer olabilir (ör. 9995). Whitelist’e <em>sunucu public IP</em> eklenmeli (ev/PC IP’si değil). Account/password’ü SMS Sağlayıcılar’dan yeniden kaydedin. Teşhis: <code>php artisan sms:texcell-diagnose</code></small>
+        </div>
+    @elseif(!empty($balanceFromTexcell))
+        <div class="alert alert-success py-2">
+            SMS hakkı Texcell <code>/getbalance</code> ile güncellendi.
+        </div>
+    @endif
 
     <div class="sms-workspace">
         <div class="row">

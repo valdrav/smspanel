@@ -41,8 +41,8 @@ class AdminUserSeeder extends Seeder
                     'phone' => $data['phone'],
                     'password' => Hash::make($data['password']),
                     'status' => UserStatus::Active->value,
-                    'sms_balance' => 10000.0000,
-                    'sms_sender_id' => 'SMSPANEL',
+                    'sms_balance' => 0,
+                    'sms_sender_id' => null,
                     'email_verified_at' => now(),
                 ]
             );

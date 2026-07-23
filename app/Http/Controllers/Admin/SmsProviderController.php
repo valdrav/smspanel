@@ -85,13 +85,15 @@ class SmsProviderController extends Controller
         $result = $this->smsProviderService->testBalance($smsProvider);
 
         if ($result->success) {
-            return back()->with('success', 'Sağlayıcı bakiyesi sorgulandı: '.number_format($result->balance, 0, ',', '.').' SMS'
-                .($smsProvider->driver === \App\Enums\SmsProviderDriver::Texcell
-                    ? ' (ana kullanıcı SMS hakkına senkronlandı)'
-                    : ''));
+            $extra = '';
+            if ($smsProvider->driver === \App\Enums\SmsProviderDriver::Texcell) {
+                $extra = ' — ana kullanıcı SMS hakkı bu bakiyeye çekildi';
+            }
+
+            return back()->with('success', 'Texcell bakiyesi: '.number_format($result->balance, 0, ',', '.').' SMS'.$extra);
         }
 
-        return back()->with('error', $result->errorMessage ?? 'Bakiye sorgulanamadı.');
+        return back()->with('error', $result->errorMessage ?? 'Bakiye sorgulanamadı. Whitelist’e sunucu IP’sini ekleyin; account/password’ü yeniden kaydedin.');
     }
 
     /**

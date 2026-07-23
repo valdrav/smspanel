@@ -53,12 +53,17 @@ class SmsSendController extends Controller
         $defaultProviderIsTexcell = $defaultProvider?->driver === SmsProviderDriver::Texcell
             || ($defaultProvider === null && config('sms.default_provider') === 'texcell');
 
+        $texcellSyncError = null;
+        $texcellSynced = false;
+
         if (
             $defaultProviderIsTexcell
             && filter_var(config('sms.texcell.sync_balance_to_admin', true), FILTER_VALIDATE_BOOL)
         ) {
-            $this->texcellBalanceSyncService->syncDefault($user);
+            $sync = $this->texcellBalanceSyncService->syncDefault($user);
             $user->refresh();
+            $texcellSynced = $sync->success;
+            $texcellSyncError = $sync->success ? null : ($sync->errorMessage ?? 'Texcell bakiye alınamadı.');
         }
 
         $balance = $this->walletService->getAvailableBalance($user);
@@ -67,6 +72,8 @@ class SmsSendController extends Controller
             'pageTitle' => 'SMS Gönder',
             'balance' => $balance,
             'balanceSource' => $user->organization_id ? 'organization' : 'personal',
+            'balanceFromTexcell' => $texcellSynced,
+            'texcellSyncError' => $texcellSyncError,
             'defaultSenderId' => $defaultProviderIsTexcell ? '' : $defaultSender,
             'defaultProviderIsTexcell' => $defaultProviderIsTexcell,
             'senderNumbers' => $senderNumbers,

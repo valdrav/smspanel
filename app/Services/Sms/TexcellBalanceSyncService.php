@@ -4,17 +4,20 @@ namespace App\Services\Sms;
 
 use App\Enums\RoleName;
 use App\Enums\SmsProviderDriver;
+use App\Models\Organization;
 use App\Models\SmsProvider;
 use App\Models\User;
+use App\Repositories\Contracts\OrganizationRepositoryInterface;
 use App\Repositories\Contracts\SmsProviderRepositoryInterface;
 use App\Repositories\Contracts\UserRepositoryInterface;
 use App\Sms\DTOs\SmsBalanceResult;
 use App\Sms\SmsProviderFactory;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Texcell /getbalance sonucunu ana kullanıcının SMS hakkına yansıtır.
+ * Texcell GET /getbalance sonucunu ana kullanıcının (veya organizasyonunun) SMS hakkına yazar.
  */
 class TexcellBalanceSyncService
 {
@@ -22,9 +25,10 @@ class TexcellBalanceSyncService
         private readonly SmsProviderRepositoryInterface $smsProviderRepository,
         private readonly SmsProviderFactory $smsProviderFactory,
         private readonly UserRepositoryInterface $userRepository,
+        private readonly OrganizationRepositoryInterface $organizationRepository,
     ) {}
 
-    public function syncProvider(SmsProvider $provider): SmsBalanceResult
+    public function syncProvider(SmsProvider $provider, ?User $actingUser = null): SmsBalanceResult
     {
         if ($provider->driver !== SmsProviderDriver::Texcell) {
             return new SmsBalanceResult(success: false, errorMessage: 'Sağlayıcı Texcell değil.');
@@ -34,6 +38,11 @@ class TexcellBalanceSyncService
         $result = $instance->getBalance();
 
         if (! $result->success) {
+            Log::channel('daily')->warning('Texcell bakiye senkronu başarısız', [
+                'error' => $result->errorMessage,
+                'provider_id' => $provider->id,
+            ]);
+
             return $result;
         }
 
@@ -42,86 +51,114 @@ class TexcellBalanceSyncService
             'last_balance_checked_at' => now(),
         ]);
 
-        $this->applyBalanceToMainUsers((float) $result->balance);
+        Cache::put('texcell.last_balance', (float) $result->balance, now()->addMinutes(5));
+
+        $credits = max(0, (int) floor((float) $result->balance));
+
+        if ($actingUser !== null) {
+            $this->applyCreditsToUserWallet($actingUser, $credits);
+        }
+
+        $this->applyCreditsToPanelAdmins($credits);
 
         return $result;
+    }
+
+    public function syncDefault(?User $actingUser = null): SmsBalanceResult
+    {
+        $provider = $this->resolveTexcellProvider();
+
+        if ($provider === null) {
+            return new SmsBalanceResult(success: false, errorMessage: 'Aktif Texcell sağlayıcısı yok. SMS Sağlayıcılar’dan ekleyin.');
+        }
+
+        return $this->syncProvider($provider, $actingUser);
     }
 
     /**
-     * Varsayılan Texcell sağlayıcısından bakiye çeker ve ana kullanıcıya işler.
+     * Kısa önbellekli Texcell bakiyesi (görüntüleme). Senkron başarısızsa null.
      */
-    public function syncDefault(?User $actingUser = null): SmsBalanceResult
+    public function cachedUpstreamBalance(): ?float
+    {
+        $cached = Cache::get('texcell.last_balance');
+
+        return is_numeric($cached) ? (float) $cached : null;
+    }
+
+    private function resolveTexcellProvider(): ?SmsProvider
     {
         $provider = $this->smsProviderRepository->findDefaultActive();
 
-        if ($provider === null || $provider->driver !== SmsProviderDriver::Texcell) {
-            $provider = SmsProvider::query()
-                ->where('driver', SmsProviderDriver::Texcell->value)
-                ->where('is_active', true)
-                ->orderByDesc('is_default')
-                ->first();
+        if ($provider !== null && $provider->driver === SmsProviderDriver::Texcell) {
+            return $provider;
         }
 
-        if ($provider === null) {
-            return new SmsBalanceResult(success: false, errorMessage: 'Aktif Texcell sağlayıcısı yok.');
-        }
-
-        $result = $this->syncProvider($provider);
-
-        // İşlemi yapan süper admin organizasyonsuz ise ona da yaz (zaten apply içinde).
-        if ($result->success && $actingUser !== null) {
-            $this->applyToUserIfEligible($actingUser, (float) $result->balance);
-        }
-
-        return $result;
+        return SmsProvider::query()
+            ->where('driver', SmsProviderDriver::Texcell->value)
+            ->where('is_active', true)
+            ->orderByDesc('is_default')
+            ->first();
     }
 
-    private function applyBalanceToMainUsers(float $balance): void
+    private function applyCreditsToPanelAdmins(int $credits): void
     {
-        $credits = max(0, (int) floor($balance));
-
-        $users = User::query()
-            ->role(RoleName::SuperAdmin->value)
+        $users = User::role([RoleName::SuperAdmin->value, RoleName::Admin->value])
             ->whereNull('organization_id')
             ->get();
 
-        if ($users->isEmpty()) {
-            Log::channel('daily')->warning('Texcell bakiye senkronu: süper admin bulunamadı', [
-                'balance' => $credits,
-            ]);
-
-            return;
-        }
-
         foreach ($users as $user) {
-            $this->applyToUserIfEligible($user, (float) $credits);
+            $this->writePersonalBalance($user, $credits);
         }
     }
 
-    private function applyToUserIfEligible(User $user, float $balance): void
+    private function applyCreditsToUserWallet(User $user, int $credits): void
     {
         if ($user->organization_id !== null) {
-            return;
+            $organization = $this->organizationRepository->findById($user->organization_id);
+            if ($organization instanceof Organization) {
+                $this->writeOrganizationBalance($organization, $credits);
+
+                return;
+            }
         }
 
-        if (! method_exists($user, 'hasRole') || ! $user->hasRole(RoleName::SuperAdmin->value)) {
-            return;
-        }
+        $this->writePersonalBalance($user, $credits);
+    }
 
-        $credits = max(0, (int) floor($balance));
-
+    private function writePersonalBalance(User $user, int $credits): void
+    {
         DB::transaction(function () use ($user, $credits): void {
             $locked = $this->userRepository->findByIdOrFail($user->id);
-            $before = (float) $locked->sms_balance;
+            $before = (int) floor((float) $locked->sms_balance);
 
-            if ((int) $before === $credits) {
+            if ($before === $credits) {
                 return;
             }
 
             $this->userRepository->update($locked, ['sms_balance' => $credits]);
 
-            Log::channel('daily')->info('Texcell bakiye → SMS hakkı senkronu', [
+            Log::channel('daily')->info('Texcell → kişisel SMS hakkı', [
                 'user_id' => $locked->id,
+                'before' => $before,
+                'after' => $credits,
+            ]);
+        });
+    }
+
+    private function writeOrganizationBalance(Organization $organization, int $credits): void
+    {
+        DB::transaction(function () use ($organization, $credits): void {
+            $locked = $this->organizationRepository->findByIdOrFail($organization->id);
+            $before = (int) floor((float) $locked->sms_balance);
+
+            if ($before === $credits) {
+                return;
+            }
+
+            $this->organizationRepository->update($locked, ['sms_balance' => $credits]);
+
+            Log::channel('daily')->info('Texcell → organizasyon SMS hakkı', [
+                'organization_id' => $locked->id,
                 'before' => $before,
                 'after' => $credits,
             ]);

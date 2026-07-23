@@ -4,8 +4,7 @@ namespace App\Console\Commands;
 
 use App\Enums\SmsProviderDriver;
 use App\Models\SmsProvider;
-use App\Sms\Providers\TexcellEimsSmsProvider;
-use App\Sms\SmsProviderFactory;
+use App\Services\Sms\TexcellBalanceSyncService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Http;
 
@@ -21,7 +20,7 @@ class DiagnoseTexcellCommand extends Command
 
     protected $description = 'Texcell getbalance ile kimlik/IP bağlantısını test eder (SMS göndermez)';
 
-    public function handle(SmsProviderFactory $factory): int
+    public function handle(TexcellBalanceSyncService $syncService): int
     {
         /** @var SmsProvider|null $model */
         $model = SmsProvider::query()
@@ -36,25 +35,19 @@ class DiagnoseTexcellCommand extends Command
         $baseUrl = rtrim(trim((string) ($this->option('base-url') ?: ($config['base_url'] ?? config('sms.texcell.base_url')))), '/');
 
         $this->info('Texcell teşhis');
-        $this->line('DB kayıt: '.($model ? "#{$model->id} {$model->code} (active=".(($model->is_active ?? false) ? 'yes' : 'no').')' : 'yok'));
+        $this->line('DB kayıt: '.($model ? "#{$model->id} {$model->code}" : 'yok'));
         $this->line('Base URL: '.$baseUrl);
         $this->line('Account: '.$account);
-        $this->line('Password uzunluk: '.strlen($password).' (değer gösterilmez)');
-        $this->line('Encryption key: '.(trim((string) ($config['encryption_key'] ?? '')) !== '' ? 'DOLU' : 'boş'));
+        $this->line('Password uzunluk: '.strlen($password));
         $this->newLine();
 
         if ($account === '' || $password === '') {
-            $this->error('Account/password boş. Panelden Texcell kaydına girin veya --account/--password kullanın.');
+            $this->error('Account/password boş.');
 
             return self::FAILURE;
         }
 
-        $url = $baseUrl.'/getbalance?'.http_build_query([
-            'account' => $account,
-            'password' => $password,
-        ]);
-
-        $this->line('İstek: GET '.$baseUrl.'/getbalance?account='.$account.'&password=***');
+        $this->line('GET '.$baseUrl.'/getbalance?account='.$account.'&password=***');
 
         try {
             $response = Http::timeout(30)->acceptJson()->get($baseUrl.'/getbalance', [
@@ -69,36 +62,32 @@ class DiagnoseTexcellCommand extends Command
 
         $this->line('HTTP: '.$response->status());
         $this->line('Yanıt: '.$response->body());
-        $this->newLine();
 
         $data = $response->json();
         $status = is_array($data) ? (int) ($data['status'] ?? -99) : -99;
 
         if ($status === 0) {
-            $this->info('OK — kimlik doğrulandı. Balance: '.($data['balance'] ?? '?').' gift: '.($data['gift'] ?? '?'));
+            $balance = (float) ($data['balance'] ?? 0) + (float) ($data['gift'] ?? 0);
+            $this->info('OK — Balance: '.$balance);
+
+            if ($model !== null) {
+                $sync = $syncService->syncProvider($model);
+                $this->line($sync->success
+                    ? 'SMS hakkı senkronlandı: '.(int) floor($sync->balance)
+                    : 'Senkron başarısız: '.$sync->errorMessage);
+            }
 
             return self::SUCCESS;
         }
 
         if ($status === -1) {
             $this->error('Authentication failure (-1)');
-            $this->warn('1) Panelde account/password’ü yeniden kaydedin (APP_KEY değiştiyse şifreli config bozulmuş olabilir).');
-            $this->warn('2) Encryption Key alanını BOŞ bırakın (Texcell size key vermediyse).');
-            $this->warn('3) Sunucu public IP’nizi Texcell whitelist’e ekletin (bazen -1 döner).');
-            $this->warn('4) Texcell’e CTU780 hesabının aktif olduğunu doğrulattırın.');
+            $this->warn('Whitelist = SUNUCU public IP (curl -4 ifconfig.me), ev/PC IP değil.');
+            $this->warn('Panelde account/password yeniden kaydedin; Encryption Key boş; URL :20003');
         } elseif ($status === -2) {
             $this->error('IP limited (-2) — sunucu IP whitelist’te değil.');
         } else {
-            $this->error("Beklenmeyen status: {$status}");
-        }
-
-        // Provider sınıfı üzerinden de dene
-        if ($model !== null) {
-            $provider = $factory->makeFromModel($model);
-            if ($provider instanceof TexcellEimsSmsProvider) {
-                $balance = $provider->getBalance();
-                $this->line('Provider getBalance(): '.($balance->success ? 'OK '.$balance->balance : 'FAIL '.$balance->errorMessage));
-            }
+            $this->error("Status: {$status}");
         }
 
         return self::FAILURE;

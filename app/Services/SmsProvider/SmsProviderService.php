@@ -121,7 +121,7 @@ class SmsProviderService implements SmsProviderServiceInterface
             $provider->driver === SmsProviderDriver::Texcell
             && filter_var(config('sms.texcell.sync_balance_to_admin', true), FILTER_VALIDATE_BOOL)
         ) {
-            return $this->texcellBalanceSyncService->syncProvider($provider);
+            return $this->texcellBalanceSyncService->syncProvider($provider, Auth::user());
         }
 
         $instance = $this->smsProviderFactory->makeFromModel($provider);
