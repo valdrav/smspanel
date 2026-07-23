@@ -25,9 +25,9 @@ class SendSmsRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'recipient' => ['required', 'string', 'max:20'],
+            'recipient' => ['required', 'string', 'max:32'],
             'message' => ['required', 'string', 'min:1', 'max:918'],
-            'sender_id' => ['nullable', 'string', 'max:11', 'alpha_num'],
+            'sender_id' => ['nullable', 'string', 'max:20'],
         ];
     }
 
@@ -42,7 +42,6 @@ class SendSmsRequest extends FormRequest
             'recipient.required' => 'Telefon numarası zorunludur.',
             'message.required' => 'Mesaj metni zorunludur.',
             'message.max' => 'Mesaj en fazla 918 karakter olabilir.',
-            'sender_id.alpha_num' => 'Gönderici başlığı yalnızca harf ve rakam içerebilir.',
         ];
     }
 }

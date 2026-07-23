@@ -35,4 +35,17 @@ class SmsSupportTest extends TestCase
         $this->assertTrue($normalizer->isValidTurkishMobile('5551234567'));
         $this->assertFalse($normalizer->isValidTurkishMobile('12345'));
     }
+
+    public function test_phone_normalizer_accepts_international_numbers(): void
+    {
+        $normalizer = new PhoneNormalizer;
+
+        $this->assertSame('447700900123', $normalizer->normalize('+44 7700 900123'));
+        $this->assertSame('994501234567', $normalizer->normalize('00994501234567'));
+        $this->assertTrue($normalizer->isValidRecipient('+447700900123'));
+        $this->assertTrue($normalizer->isValidRecipient('905551234567'));
+        $this->assertTrue($normalizer->isValidRecipient('5551234567'));
+        $this->assertFalse($normalizer->isValidRecipient('12345'));
+        $this->assertFalse($normalizer->isValidRecipient('0123456789'));
+    }
 }

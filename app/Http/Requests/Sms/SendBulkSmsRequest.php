@@ -27,7 +27,7 @@ class SendBulkSmsRequest extends FormRequest
         return [
             'recipients' => ['required', 'string'],
             'message' => ['required', 'string', 'min:1', 'max:918'],
-            'sender_id' => ['nullable', 'string', 'max:11', 'alpha_num'],
+            'sender_id' => ['nullable', 'string', 'max:20'],
         ];
     }
 

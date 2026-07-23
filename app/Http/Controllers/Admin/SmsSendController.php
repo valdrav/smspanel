@@ -78,7 +78,7 @@ class SmsSendController extends Controller
             'encoding' => $isUnicode ? 'unicode' : 'gsm',
             'balance' => (int) $balance,
             'can_afford' => $balance >= $segments,
-            'recipient_valid' => $recipient === '' || $this->phoneNormalizer->isValidTurkishMobile(
+            'recipient_valid' => $recipient === '' || $this->phoneNormalizer->isValidRecipient(
                 $this->phoneNormalizer->normalize($recipient)
             ),
         ]);

@@ -53,8 +53,8 @@ class SmsSendService implements SmsSendServiceInterface
         $this->ensureProviderMessageLength($data->message);
         $recipient = $this->phoneNormalizer->normalize($data->recipient);
 
-        if (! $this->phoneNormalizer->isValidTurkishMobile($recipient)) {
-            throw new BusinessException('Geçerli bir cep telefonu numarası giriniz.');
+        if (! $this->phoneNormalizer->isValidRecipient($recipient)) {
+            throw new BusinessException('Geçerli bir telefon numarası giriniz (ör. 5551234567 veya 905551234567).');
         }
 
         $message = $this->createAndQueueMessage(
@@ -98,7 +98,7 @@ class SmsSendService implements SmsSendServiceInterface
         foreach ($data->recipients as $recipientLine) {
             $recipient = $this->phoneNormalizer->normalize($recipientLine);
 
-            if (! $this->phoneNormalizer->isValidTurkishMobile($recipient)) {
+            if (! $this->phoneNormalizer->isValidRecipient($recipient)) {
                 throw new BusinessException("Geçersiz telefon numarası: {$recipientLine}");
             }
 
