@@ -4,7 +4,6 @@ namespace App\Services\Sms;
 
 use App\Enums\RoleName;
 use App\Enums\SmsProviderDriver;
-use App\Models\Organization;
 use App\Models\SmsProvider;
 use App\Models\User;
 use App\Repositories\Contracts\OrganizationRepositoryInterface;
@@ -12,12 +11,14 @@ use App\Repositories\Contracts\SmsProviderRepositoryInterface;
 use App\Repositories\Contracts\UserRepositoryInterface;
 use App\Sms\DTOs\SmsBalanceResult;
 use App\Sms\SmsProviderFactory;
+use App\Support\UserScope;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Texcell USD bakiyesini (Bro Per SMS) panel SMS adedine çevirip yazar.
+ * Texcell getbalance yanıtını okur; API bakiyesini yönetici panelinde gösterir.
+ * Gönderim kontrolü için operatör cüzdanına iç dönüşüm uygulanır (müşteriye gösterilmez).
  */
 class TexcellBalanceSyncService
 {
@@ -51,31 +52,35 @@ class TexcellBalanceSyncService
         $credits = $this->creditConverter->usdToCredits($usd);
 
         $this->smsProviderRepository->update($provider, [
-            'last_balance' => $credits,
+            'last_balance' => $usd,
             'last_balance_checked_at' => now(),
         ]);
 
         Cache::put('texcell.last_balance_usd', $usd, now()->addMinutes(5));
-        Cache::put('texcell.last_balance', (float) $credits, now()->addMinutes(5));
-        Cache::put('texcell.usd_per_sms', $this->creditConverter->rate(), now()->addMinutes(5));
+        Cache::put('texcell.last_balance_credits', (float) $credits, now()->addMinutes(5));
 
-        if ($actingUser !== null) {
-            $this->applyCreditsToUserWallet($actingUser, $credits);
+        if ($actingUser !== null && UserScope::isPlatformOperator($actingUser)) {
+            $this->writePersonalBalance($actingUser, $credits);
         }
 
         $this->applyCreditsToPanelAdmins($credits);
 
-        Log::channel('daily')->info('Texcell USD → SMS adet', [
+        Log::channel('daily')->info('Texcell getbalance senkronu', [
             'usd' => $usd,
-            'rate' => $this->creditConverter->rate(),
-            'credits' => $credits,
+            'balance' => $result->rawBalance,
+            'gift' => $result->rawGift,
+            'credit' => $result->rawCredit,
+            'internal_credits' => $credits,
         ]);
 
         return new SmsBalanceResult(
             success: true,
-            balance: (float) $credits,
-            currency: 'SMS',
+            balance: $usd,
+            currency: 'USD',
             rawUsd: $usd,
+            rawBalance: $result->rawBalance,
+            rawGift: $result->rawGift,
+            rawCredit: $result->rawCredit,
         );
     }
 
@@ -94,18 +99,19 @@ class TexcellBalanceSyncService
         return $this->syncProvider($provider, $actingUser);
     }
 
+    /**
+     * API'den gelen ham USD bakiyesi (önbellek).
+     */
     public function cachedUpstreamBalance(): ?float
     {
-        $cached = Cache::get('texcell.last_balance');
+        $cached = Cache::get('texcell.last_balance_usd');
 
         return is_numeric($cached) ? (float) $cached : null;
     }
 
     public function cachedUpstreamUsd(): ?float
     {
-        $cached = Cache::get('texcell.last_balance_usd');
-
-        return is_numeric($cached) ? (float) $cached : null;
+        return $this->cachedUpstreamBalance();
     }
 
     private function resolveTexcellProvider(): ?SmsProvider
@@ -134,20 +140,6 @@ class TexcellBalanceSyncService
         }
     }
 
-    private function applyCreditsToUserWallet(User $user, int $credits): void
-    {
-        if ($user->organization_id !== null) {
-            $organization = $this->organizationRepository->findById($user->organization_id);
-            if ($organization instanceof Organization) {
-                $this->writeOrganizationBalance($organization, $credits);
-
-                return;
-            }
-        }
-
-        $this->writePersonalBalance($user, $credits);
-    }
-
     private function writePersonalBalance(User $user, int $credits): void
     {
         DB::transaction(function () use ($user, $credits): void {
@@ -160,28 +152,8 @@ class TexcellBalanceSyncService
 
             $this->userRepository->update($locked, ['sms_balance' => $credits]);
 
-            Log::channel('daily')->info('Texcell → kişisel SMS hakkı', [
+            Log::channel('daily')->info('Texcell → operatör SMS hakkı (iç)', [
                 'user_id' => $locked->id,
-                'before' => $before,
-                'after' => $credits,
-            ]);
-        });
-    }
-
-    private function writeOrganizationBalance(Organization $organization, int $credits): void
-    {
-        DB::transaction(function () use ($organization, $credits): void {
-            $locked = $this->organizationRepository->findByIdOrFail($organization->id);
-            $before = (int) floor((float) $locked->sms_balance);
-
-            if ($before === $credits) {
-                return;
-            }
-
-            $this->organizationRepository->update($locked, ['sms_balance' => $credits]);
-
-            Log::channel('daily')->info('Texcell → organizasyon SMS hakkı', [
-                'organization_id' => $locked->id,
                 'before' => $before,
                 'after' => $credits,
             ]);

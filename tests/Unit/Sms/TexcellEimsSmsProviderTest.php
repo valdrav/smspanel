@@ -108,13 +108,14 @@ class TexcellEimsSmsProviderTest extends TestCase
         $this->assertStringContainsString('Authentication failure', (string) $result->errorMessage);
     }
 
-    public function test_get_balance_sums_gift(): void
+    public function test_get_balance_sums_gift_and_credit(): void
     {
         Http::fake([
             '*/getbalance*' => Http::response([
                 'status' => 0,
                 'balance' => '99.990000',
                 'gift' => '50.00000',
+                'credit' => '10.50000',
             ], 200),
         ]);
 
@@ -127,7 +128,10 @@ class TexcellEimsSmsProviderTest extends TestCase
         $result = $provider->getBalance();
 
         $this->assertTrue($result->success);
-        $this->assertEqualsWithDelta(149.99, $result->balance, 0.001);
+        $this->assertEqualsWithDelta(160.49, $result->balance, 0.001);
+        $this->assertEqualsWithDelta(99.99, $result->rawBalance, 0.001);
+        $this->assertEqualsWithDelta(50.0, $result->rawGift, 0.001);
+        $this->assertEqualsWithDelta(10.5, $result->rawCredit, 0.001);
     }
 
     public function test_send_bulk_groups_same_message(): void

@@ -87,10 +87,12 @@ class SmsProviderController extends Controller
         if ($result->success) {
             $extra = '';
             if ($smsProvider->driver === \App\Enums\SmsProviderDriver::Texcell) {
-                $extra = ' — ana kullanıcı SMS hakkı bu bakiyeye çekildi';
+                $extra = ' — operatör cüzdanı güncellendi';
             }
 
-            return back()->with('success', 'Texcell bakiyesi: '.number_format($result->balance, 0, ',', '.').' SMS'.$extra);
+            $unit = $smsProvider->driver === \App\Enums\SmsProviderDriver::Texcell ? ' USD' : ' SMS';
+
+            return back()->with('success', 'Sağlayıcı bakiyesi: '.number_format($result->balance, 4, ',', '.').$unit.$extra);
         }
 
         return back()->with('error', $result->errorMessage ?? 'Bakiye sorgulanamadı. Whitelist’e sunucu IP’sini ekleyin; account/password’ü yeniden kaydedin.');

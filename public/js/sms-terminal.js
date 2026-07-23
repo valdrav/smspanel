@@ -21,10 +21,26 @@
         body.scrollTop = body.scrollHeight;
     }
 
-    function updateBalance(balance) {
+    function formatBalance(balance, unit) {
+        if (typeof balance !== 'number') return '';
+        if (unit === 'USD') {
+            return new Intl.NumberFormat('tr-TR', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 4,
+            }).format(balance);
+        }
+        return new Intl.NumberFormat('tr-TR').format(balance);
+    }
+
+    function updateBalance(balance, unit) {
         const el = $('#sms-balance-value');
+        const unitEl = $('#sms-balance-unit');
+        const resolvedUnit = unit || config.balanceUnit || 'SMS';
         if (el && typeof balance === 'number') {
-            el.textContent = new Intl.NumberFormat('tr-TR').format(balance);
+            el.textContent = formatBalance(balance, resolvedUnit);
+        }
+        if (unitEl) {
+            unitEl.textContent = resolvedUnit;
         }
     }
 
@@ -34,6 +50,8 @@
         const statChars = $('#stat-chars');
         const statSegments = $('#stat-segments');
         const statEncoding = $('#stat-encoding');
+        const displayBalance = typeof data.display_balance === 'number' ? data.display_balance : data.balance;
+        const displayUnit = data.display_unit || config.balanceUnit || 'SMS';
 
         if (bubble) bubble.textContent = data.message || 'Mesajınız burada görünecek...';
         if (statChars) statChars.textContent = data.chars || 0;
@@ -41,16 +59,17 @@
         if (statEncoding) statEncoding.textContent = data.encoding === 'unicode' ? 'Unicode' : 'GSM';
         if (meta) {
             let text = (data.segments || 1) + ' segment · ' + (data.credits || 1) + ' SMS hakkı kullanılacak';
-            if (typeof data.balance === 'number') {
-                text += ' · Kalan: ' + data.balance;
+            if (typeof displayBalance === 'number') {
+                text += ' · ' + (data.show_upstream ? 'Bakiye: ' : 'Kalan: ') + formatBalance(displayBalance, displayUnit);
+                if (displayUnit) text += ' ' + displayUnit;
             }
             if (data.can_afford === false) {
                 text += ' (yetersiz hak)';
             }
             meta.textContent = text;
         }
-        if (typeof data.balance === 'number') {
-            updateBalance(data.balance);
+        if (typeof displayBalance === 'number') {
+            updateBalance(displayBalance, displayUnit);
         }
     }
 
@@ -75,6 +94,9 @@
                     credits: data.credits,
                     encoding: data.encoding,
                     balance: data.balance,
+                    display_balance: data.display_balance,
+                    display_unit: data.display_unit,
+                    show_upstream: data.show_upstream,
                     can_afford: data.can_afford,
                 });
 
@@ -87,16 +109,24 @@
                 }
 
                 if (data.can_afford === false) {
-                    terminalLog('Uyarı: Kalan SMS hakkınız bu mesaj için yetersiz (' + data.balance + ').', 'warning');
+                    const unit = data.display_unit || 'SMS';
+                    const shown = typeof data.display_balance === 'number' ? data.display_balance : data.balance;
+                    terminalLog('Uyarı: Bu mesaj için yetersiz hak (' + formatBalance(shown, unit) + ' ' + unit + ').', 'warning');
                 }
 
                 if (data.texcell_sync_error) {
-                    terminalLog('Texcell bakiye senkronu başarısız: ' + data.texcell_sync_error, 'warning');
-                } else if (data.texcell_synced && typeof data.balance === 'number' && data.balance > 0) {
-                    terminalLog('Texcell bakiyesi güncellendi → ' + data.balance + ' SMS hakkı.', 'success');
+                    terminalLog('Sağlayıcı bakiyesi alınamadı: ' + data.texcell_sync_error, 'warning');
                 }
 
-                terminalLog('Segment: ' + data.segments + ' · Kodlama: ' + (data.encoding === 'unicode' ? 'Unicode (TR)' : 'GSM') + ' · Hak: ' + data.balance, 'info');
+                const unit = data.display_unit || 'SMS';
+                const shown = typeof data.display_balance === 'number' ? data.display_balance : data.balance;
+                terminalLog(
+                    'Segment: ' + data.segments
+                    + ' · Kodlama: ' + (data.encoding === 'unicode' ? 'Unicode (TR)' : 'GSM')
+                    + ' · ' + (data.show_upstream ? 'Bakiye: ' : 'Hak: ')
+                    + formatBalance(shown, unit) + ' ' + unit,
+                    'info'
+                );
             })
             .catch(() => terminalLog('Önizleme alınamadı.', 'error'));
     }
@@ -140,9 +170,9 @@
     function reportResults(data) {
         terminalLog((data.success ? '✓ ' : '✗ ') + (data.message || 'İşlem tamamlandı.'), data.success ? 'success' : 'error');
 
-        if (typeof data.balance === 'number') {
-            updateBalance(data.balance);
-            terminalLog('Kalan SMS hakkı: ' + data.balance, 'info');
+        if (typeof data.balance === 'number' && !config.showUpstream) {
+            updateBalance(data.balance, 'SMS');
+            terminalLog('Kalan SMS hakkı: ' + formatBalance(data.balance, 'SMS'), 'info');
         }
 
         if (data.sent) terminalLog('Gönderilen: ' + data.sent, 'success');
@@ -188,7 +218,6 @@
             .then(data => {
                 reportResults(data);
                 form.reset();
-                // Toplu gönderim sonrası tekil alandaki eski numarayı da temizle
                 const singleRecipient = $('#sms-recipient');
                 if (singleRecipient) singleRecipient.value = '';
                 onInputChange();
@@ -209,7 +238,7 @@
     document.addEventListener('DOMContentLoaded', function () {
         if (!config.previewUrl) return;
 
-        terminalLog('SMS Terminal hazır. Haklar paket/onay ile yüklenir; gönderimde düşer.', 'success');
+        terminalLog('SMS Terminal hazır.', 'success');
 
         $$('.mode-btn').forEach(btn => {
             btn.addEventListener('click', () => switchMode(btn.dataset.mode));

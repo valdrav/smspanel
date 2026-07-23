@@ -10,15 +10,15 @@
         </div>
         <div class="sms-stat-pill mt-2 mt-md-0">
             <i class="fas fa-bolt text-warning"></i>
-            @if(($balanceSource ?? 'personal') === 'organization')
-                Organizasyon hakkı:
-            @else
-                Kalan hak:
-            @endif
-            <strong id="sms-balance-value">{{ number_format($balance, 0, ',', '.') }}</strong> SMS
-            @if(!empty($balanceFromTexcell))
-                <small class="ml-1 text-muted">(Texcell)</small>
-            @endif
+            {{ $balanceLabel ?? 'Kalan hak' }}:
+            <strong id="sms-balance-value">
+                @if(($balanceUnit ?? 'SMS') === 'USD')
+                    {{ number_format($balance, 4, ',', '.') }}
+                @else
+                    {{ number_format($balance, 0, ',', '.') }}
+                @endif
+            </strong>
+            <span id="sms-balance-unit">{{ $balanceUnit ?? 'SMS' }}</span>
         </div>
     </div>
 @stop
@@ -26,19 +26,10 @@
 @section('content')
     @include('admin.partials.alerts')
 
-    @if(!empty($texcellSyncError))
+    @if(!empty($isPlatformOperator) && !empty($texcellSyncError))
         <div class="alert alert-danger">
-            <strong>Texcell bakiye alınamadı.</strong> {{ $texcellSyncError }}
-            <br><small>SMS hakkı hâlâ eski/demo değer olabilir. Whitelist’e <em>sunucu public IP</em> eklenmeli (ev/PC IP’si değil). Teşhis: <code>php artisan sms:texcell-diagnose</code></small>
-        </div>
-    @elseif(!empty($balanceFromTexcell))
-        <div class="alert alert-success py-2">
-            SMS hakkı Texcell bakiyesinden güncellendi
-            ({{ number_format((float) config('sms.texcell.usd_per_sms', 0.0072), 4, '.', '') }} USD / SMS).
-            @if(($texcellUsd ?? null) !== null)
-                <br><small>Texcell USD: {{ number_format($texcellUsd, 4, '.', ',') }} →
-                {{ number_format($balance, 0, ',', '.') }} adet</small>
-            @endif
+            <strong>Sağlayıcı bakiyesi alınamadı.</strong> {{ $texcellSyncError }}
+            <br><small>Whitelist’e <em>sunucu public IP</em> eklenmeli (ev/PC IP’si değil). Teşhis: <code>php artisan sms:texcell-diagnose</code></small>
         </div>
     @endif
 
@@ -182,6 +173,8 @@
         sendUrl: @json(route('admin.sms.send.store')),
         bulkUrl: @json(route('admin.sms.send.bulk')),
         csrfToken: @json(csrf_token()),
+        showUpstream: @json($showUpstreamBalance ?? false),
+        balanceUnit: @json($balanceUnit ?? 'SMS'),
     };
 </script>
 <script src="{{ asset('js/sms-terminal.js') }}"></script>

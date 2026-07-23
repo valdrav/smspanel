@@ -130,12 +130,12 @@ class DiagnoseTexcellCommand extends Command
                 );
                 $sync = $syncService->syncProvider($model->fresh() ?? $model);
                 if ($sync->success) {
-                    $rate = app(\App\Services\Sms\TexcellCreditConverter::class)->rate();
+                    $usd = (float) ($sync->rawUsd ?? $sync->balance);
+                    $converter = app(\App\Services\Sms\TexcellCreditConverter::class);
                     $this->info(sprintf(
-                        'Texcell USD: %s | Bro Per SMS: %s USD | Panel SMS adedi: %d',
-                        number_format((float) ($sync->rawUsd ?? 0), 6, '.', ''),
-                        number_format($rate, 4, '.', ''),
-                        (int) floor((float) $sync->balance)
+                        'API bakiyesi: %s USD (balance+gift+credit) | iç gönderim hakkı: %d adet',
+                        number_format($usd, 4, '.', ''),
+                        $converter->usdToCredits($usd)
                     ));
                 } else {
                     $this->line('Senkron uyarısı: '.$sync->errorMessage);

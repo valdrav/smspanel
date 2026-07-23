@@ -125,14 +125,20 @@ class TexcellEimsSmsProvider extends AbstractSmsProvider
                 );
             }
 
+            // EIMS getbalance: balance + gift + credit (USD hesap bakiyesi)
             $balance = (float) ($data['balance'] ?? 0);
             $gift = (float) ($data['gift'] ?? 0);
+            $credit = (float) ($data['credit'] ?? 0);
+            $total = $balance + $gift + $credit;
 
             return new SmsBalanceResult(
                 success: true,
-                balance: $balance + $gift,
+                balance: $total,
                 currency: 'USD',
-                rawUsd: $balance + $gift,
+                rawUsd: $total,
+                rawBalance: $balance,
+                rawGift: $gift,
+                rawCredit: $credit,
             );
         } catch (\Throwable $exception) {
             Log::error('Texcell bakiye sorgu hatası', ['message' => $exception->getMessage()]);

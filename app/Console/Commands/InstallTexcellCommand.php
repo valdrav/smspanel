@@ -42,7 +42,10 @@ class InstallTexcellCommand extends Command
         $result = $sync->syncProvider($provider);
 
         if ($result->success) {
-            $this->info('Texcell bakiyesi panel SMS hakkına yazıldı: '.(int) floor((float) $result->balance));
+            $this->info(sprintf(
+                'API bakiyesi: %s USD (balance+gift+credit)',
+                number_format((float) ($result->rawUsd ?? $result->balance), 4, '.', '')
+            ));
 
             return self::SUCCESS;
         }
