@@ -33,7 +33,12 @@
         </div>
     @elseif(!empty($balanceFromTexcell))
         <div class="alert alert-success py-2">
-            SMS hakkı Texcell <code>/getbalance</code> ile güncellendi.
+            SMS hakkı Texcell bakiyesinden güncellendi
+            ({{ number_format((float) config('sms.texcell.usd_per_sms', 0.0072), 4, '.', '') }} USD / SMS).
+            @if(($texcellUsd ?? null) !== null)
+                <br><small>Texcell USD: {{ number_format($texcellUsd, 4, '.', ',') }} →
+                {{ number_format($balance, 0, ',', '.') }} adet</small>
+            @endif
         </div>
     @endif
 

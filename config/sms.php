@@ -50,6 +50,8 @@ return [
         'webhook_token' => env('TEXCELL_WEBHOOK_TOKEN'),
         'provider_code' => env('TEXCELL_PROVIDER_CODE', 'texcell'),
         'sync_balance_to_admin' => env('TEXCELL_SYNC_BALANCE_TO_ADMIN', true),
+        // Texcell USD bakiyesi → panel SMS adedi. Sabit: Bro Per SMS.
+        'usd_per_sms' => (float) env('TEXCELL_USD_PER_SMS', 0.0072),
     ],
 
     /*

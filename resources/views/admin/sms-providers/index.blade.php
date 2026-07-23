@@ -33,7 +33,7 @@
                             <td>{{ $provider->driverLabel() }}</td>
                             <td>
                                 @if($provider->last_balance !== null)
-                                    {{ number_format($provider->last_balance, 0, ',', '.') }} SMS
+                                    {{ number_format($provider->last_balance, 0, ',', '.') }} adet
                                     <br><small class="text-muted">{{ $provider->last_balance_checked_at?->format('d.m.Y H:i') }}</small>
                                 @else — @endif
                             </td>

@@ -97,6 +97,7 @@ class DiagnoseTexcellCommand extends Command
         ];
 
         $plainStatus = null;
+        $plainDesc = '';
         $wrongStatus = null;
 
         foreach ($probes as $probe) {
@@ -111,6 +112,7 @@ class DiagnoseTexcellCommand extends Command
 
             if ($probe['label'] === 'plain GET') {
                 $plainStatus = $result['status'];
+                $plainDesc = strtolower($result['desc']);
             }
             if ($probe['label'] === 'yanlış şifre kontrol') {
                 $wrongStatus = $result['status'];
@@ -127,16 +129,24 @@ class DiagnoseTexcellCommand extends Command
                     $baseUrl
                 );
                 $sync = $syncService->syncProvider($model->fresh() ?? $model);
-                $this->line($sync->success
-                    ? 'Panel SMS hakkı: '.(int) floor((float) $sync->balance)
-                    : 'Senkron uyarısı: '.$sync->errorMessage);
+                if ($sync->success) {
+                    $rate = app(\App\Services\Sms\TexcellCreditConverter::class)->rate();
+                    $this->info(sprintf(
+                        'Texcell USD: %s | Bro Per SMS: %s USD | Panel SMS adedi: %d',
+                        number_format((float) ($sync->rawUsd ?? 0), 6, '.', ''),
+                        number_format($rate, 4, '.', ''),
+                        (int) floor((float) $sync->balance)
+                    ));
+                } else {
+                    $this->line('Senkron uyarısı: '.$sync->errorMessage);
+                }
 
                 return self::SUCCESS;
             }
         }
 
         $this->newLine();
-        $this->explainFailure($plainStatus, $wrongStatus, $passwordMatchesKnown, $publicIp);
+        $this->explainFailure($plainStatus, $wrongStatus, $plainDesc, $passwordMatchesKnown, $publicIp);
 
         return self::FAILURE;
     }
@@ -175,25 +185,30 @@ class DiagnoseTexcellCommand extends Command
         ];
     }
 
-    private function explainFailure(?int $plainStatus, ?int $wrongStatus, bool $passwordMatchesKnown, ?string $publicIp): void
+    private function explainFailure(?int $plainStatus, ?int $wrongStatus, string $plainDesc, bool $passwordMatchesKnown, ?string $publicIp): void
     {
+        $blocked = str_contains($plainDesc, 'user blocked') || str_contains($plainDesc, 'blocked');
+
+        if ($plainStatus === -2 && $blocked) {
+            $this->error('SONUÇ: Şifre DOĞRU — hesap Texcell’de BLOKELİ (user blocked).');
+            if ($wrongStatus === -1) {
+                $this->warn('Kanıt: yanlış şifre → -1 auth; doğru şifre → -2 user blocked.');
+            }
+            $this->warn('IP whitelist değil, hesap kilidi. Texcell’den CTU780 unblock isteyin.');
+            $this->line('IP (bilgi): '.($publicIp ?? '?'));
+
+            return;
+        }
+
         if ($plainStatus === -2) {
-            $this->error('IP whitelist’te değil (-2). Verin: '.($publicIp ?? '?'));
+            $this->error('IP whitelist’te değil veya erişim kısıtı (-2). Verin: '.($publicIp ?? '?'));
 
             return;
         }
 
         if ($plainStatus === -1 && $wrongStatus === -1) {
-            $this->error('SONUÇ: Şifre paneli tarafında DOĞRU — sorun şifre değil.');
-            $this->warn('Doğru şifre ve bilerek yanlış şifre AYNI -1 → Texcell şifreyi ayırt etmiyor.');
-            $this->warn('Muhtemel: IP hâlâ kabul edilmiyor (-1 olarak), hesap kapalı/kilitli, veya hesap yetkisiz.');
-            $this->newLine();
-            $this->info('Texcell desteğine kopyalayın:');
-            $this->line('Account: CTU780');
-            $this->line('Server outbound IP: '.($publicIp ?? '195.85.207.224'));
-            $this->line('GET http://38.150.64.36:20003/getbalance → status -1 Authentication failure');
-            $this->line('Issued password is used; wrong password returns the same -1.');
-            $this->line('Please verify whitelist for this IP and that the account is enabled.');
+            $this->error('SONUÇ: Şifre paneli tarafında DOĞRU görünüyor ama API şifreyi ayırt etmiyor.');
+            $this->warn('Texcell’e: CTU780 + IP '.($publicIp ?? '?').' → status -1');
 
             return;
         }

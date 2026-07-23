@@ -131,7 +131,8 @@ class TexcellEimsSmsProvider extends AbstractSmsProvider
             return new SmsBalanceResult(
                 success: true,
                 balance: $balance + $gift,
-                currency: 'SMS',
+                currency: 'USD',
+                rawUsd: $balance + $gift,
             );
         } catch (\Throwable $exception) {
             Log::error('Texcell bakiye sorgu hatası', ['message' => $exception->getMessage()]);
@@ -403,17 +404,7 @@ class TexcellEimsSmsProvider extends AbstractSmsProvider
     {
         return match ($status) {
             -1 => 'Texcell: Kimlik doğrulama hatası — account/password veya IP whitelist kontrol edin.',
-            -2 => 'Texcell: IP erişim kısıtı (sunucu IP’nizi whitelist’e ekleyin).',
-            -3 => 'Texcell: Mesaj hassas karakter içeriyor.',
-            -4 => 'Texcell: Mesaj içeriği boş.',
-            -5 => 'Texcell: Mesaj çok uzun.',
-            -6 => 'Texcell: Şablon SMS değil.',
-            -7 => 'Texcell: Numara limiti aşıldı.',
-            -8 => 'Texcell: Numara boş.',
-            -9 => 'Texcell: Geçersiz numara.',
-            -10 => 'Texcell: Kanal bakiyesi yetersiz.',
-            -11 => 'Texcell: Zamanlama hatalı.',
-            -12 => 'Texcell: Platform toplu gönderim hatası.',
+            -2 => 'Texcell: Erişim reddedildi (IP kısıtı veya hesap blokeli).',
             -13 => 'Texcell: Kullanıcı kilitli.',
             default => "Texcell hata kodu: {$status}",
         };

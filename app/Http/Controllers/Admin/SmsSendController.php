@@ -55,6 +55,7 @@ class SmsSendController extends Controller
 
         $texcellSyncError = null;
         $texcellSynced = false;
+        $texcellUsd = null;
 
         if (
             $defaultProviderIsTexcell
@@ -64,6 +65,7 @@ class SmsSendController extends Controller
             $user->refresh();
             $texcellSynced = $sync->success;
             $texcellSyncError = $sync->success ? null : ($sync->errorMessage ?? 'Texcell bakiye alınamadı.');
+            $texcellUsd = $sync->success ? $sync->rawUsd : null;
         }
 
         $balance = $this->walletService->getAvailableBalance($user);
@@ -74,6 +76,7 @@ class SmsSendController extends Controller
             'balanceSource' => $user->organization_id ? 'organization' : 'personal',
             'balanceFromTexcell' => $texcellSynced,
             'texcellSyncError' => $texcellSyncError,
+            'texcellUsd' => $texcellUsd,
             'defaultSenderId' => $defaultProviderIsTexcell ? '' : $defaultSender,
             'defaultProviderIsTexcell' => $defaultProviderIsTexcell,
             'senderNumbers' => $senderNumbers,

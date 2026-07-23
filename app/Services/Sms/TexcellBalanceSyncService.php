@@ -17,7 +17,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Texcell GET /getbalance sonucunu ana kullanıcının (veya organizasyonunun) SMS hakkına yazar.
+ * Texcell USD bakiyesini (Bro Per SMS) panel SMS adedine çevirip yazar.
  */
 class TexcellBalanceSyncService
 {
@@ -26,6 +26,7 @@ class TexcellBalanceSyncService
         private readonly SmsProviderFactory $smsProviderFactory,
         private readonly UserRepositoryInterface $userRepository,
         private readonly OrganizationRepositoryInterface $organizationRepository,
+        private readonly TexcellCreditConverter $creditConverter,
     ) {}
 
     public function syncProvider(SmsProvider $provider, ?User $actingUser = null): SmsBalanceResult
@@ -46,14 +47,17 @@ class TexcellBalanceSyncService
             return $result;
         }
 
+        $usd = (float) ($result->rawUsd ?? $result->balance);
+        $credits = $this->creditConverter->usdToCredits($usd);
+
         $this->smsProviderRepository->update($provider, [
-            'last_balance' => $result->balance,
+            'last_balance' => $credits,
             'last_balance_checked_at' => now(),
         ]);
 
-        Cache::put('texcell.last_balance', (float) $result->balance, now()->addMinutes(5));
-
-        $credits = max(0, (int) floor((float) $result->balance));
+        Cache::put('texcell.last_balance_usd', $usd, now()->addMinutes(5));
+        Cache::put('texcell.last_balance', (float) $credits, now()->addMinutes(5));
+        Cache::put('texcell.usd_per_sms', $this->creditConverter->rate(), now()->addMinutes(5));
 
         if ($actingUser !== null) {
             $this->applyCreditsToUserWallet($actingUser, $credits);
@@ -61,7 +65,18 @@ class TexcellBalanceSyncService
 
         $this->applyCreditsToPanelAdmins($credits);
 
-        return $result;
+        Log::channel('daily')->info('Texcell USD → SMS adet', [
+            'usd' => $usd,
+            'rate' => $this->creditConverter->rate(),
+            'credits' => $credits,
+        ]);
+
+        return new SmsBalanceResult(
+            success: true,
+            balance: (float) $credits,
+            currency: 'SMS',
+            rawUsd: $usd,
+        );
     }
 
     public function syncDefault(?User $actingUser = null): SmsBalanceResult
@@ -79,12 +94,16 @@ class TexcellBalanceSyncService
         return $this->syncProvider($provider, $actingUser);
     }
 
-    /**
-     * Kısa önbellekli Texcell bakiyesi (görüntüleme). Senkron başarısızsa null.
-     */
     public function cachedUpstreamBalance(): ?float
     {
         $cached = Cache::get('texcell.last_balance');
+
+        return is_numeric($cached) ? (float) $cached : null;
+    }
+
+    public function cachedUpstreamUsd(): ?float
+    {
+        $cached = Cache::get('texcell.last_balance_usd');
 
         return is_numeric($cached) ? (float) $cached : null;
     }

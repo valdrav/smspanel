@@ -12,5 +12,6 @@ readonly class SmsBalanceResult
         public float $balance = 0.0,
         public string $currency = 'TRY',
         public ?string $errorMessage = null,
+        public ?float $rawUsd = null,
     ) {}
 }
