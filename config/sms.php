@@ -20,7 +20,7 @@ return [
         'texcell' => \App\Sms\Providers\TexcellEimsSmsProvider::class,
     ],
 
-    'default_sender_id' => env('SMS_DEFAULT_SENDER_ID', 'SMSPANEL'),
+    'default_sender_id' => env('SMS_DEFAULT_SENDER_ID', ''),
 
     /*
     |--------------------------------------------------------------------------
@@ -28,8 +28,8 @@ return [
     |--------------------------------------------------------------------------
     |
     | Charge Rule: Send billing (gönderim anında ücretlendirme).
-    | Endpoints: /getbalance, /sendsms, /getreport, /getsms, /smsjob
-    | DLR push: PUT /api/webhooks/texcell/{token}/report
+    | Base: http://IP:20003
+    | sender PDF'de opsiyonel — boş bırakılırsa API'ye gönderilmez.
     |
     */
 
@@ -37,7 +37,7 @@ return [
         'account' => env('TEXCELL_ACCOUNT'),
         'password' => env('TEXCELL_PASSWORD'),
         'base_url' => env('TEXCELL_BASE_URL', 'http://38.150.64.36:20003'),
-        'sender' => env('TEXCELL_SENDER', env('SMS_DEFAULT_SENDER_ID', 'SMSPANEL')),
+        'sender' => env('TEXCELL_SENDER', ''),
         'encryption_key' => env('TEXCELL_ENCRYPTION_KEY'),
         'webhook_token' => env('TEXCELL_WEBHOOK_TOKEN'),
         'provider_code' => env('TEXCELL_PROVIDER_CODE', 'texcell'),

@@ -45,12 +45,16 @@ class SmsSendController extends Controller
             ?? $this->userSenderNumberService->resolveSenderId($user, null);
 
         $balance = $this->walletService->getAvailableBalance($user);
+        $defaultProvider = app(\App\Repositories\Contracts\SmsProviderRepositoryInterface::class)->findDefaultActive();
+        $defaultProviderIsTexcell = $defaultProvider?->driver === \App\Enums\SmsProviderDriver::Texcell
+            || ($defaultProvider === null && config('sms.default_provider') === 'texcell');
 
         return view('admin.sms.send', [
             'pageTitle' => 'SMS Gönder',
             'balance' => $balance,
             'balanceSource' => $user->organization_id ? 'organization' : 'personal',
-            'defaultSenderId' => $defaultSender,
+            'defaultSenderId' => $defaultProviderIsTexcell ? '' : $defaultSender,
+            'defaultProviderIsTexcell' => $defaultProviderIsTexcell,
             'senderNumbers' => $senderNumbers,
             'hasAssignedSenders' => $senderNumbers->isNotEmpty(),
             'maxBatchSize' => (int) config('sms.batch_size', 1000),

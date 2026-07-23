@@ -99,6 +99,7 @@ class UserSenderNumberService implements UserSenderNumberServiceInterface
     public function resolveSenderId(User $user, ?string $requestedSenderId): string
     {
         $assigned = $this->getActiveForUser($user);
+        $usesTexcell = $this->defaultProviderIsTexcell();
 
         if ($assigned->isNotEmpty()) {
             $normalized = $requestedSenderId !== null && $requestedSenderId !== ''
@@ -115,14 +116,37 @@ class UserSenderNumberService implements UserSenderNumberServiceInterface
 
             $default = $assigned->firstWhere('is_default', true) ?? $assigned->first();
 
-            return $default->sender_id;
+            return (string) $default->sender_id;
         }
 
-        return $requestedSenderId
-            ?? $user->organization?->sms_sender_id
-            ?? $user->sms_sender_id
-            ?? $this->defaultProviderSenderId()
-            ?? config('sms.default_sender_id');
+        $requested = trim((string) ($requestedSenderId ?? ''));
+
+        // Texcell PDF: sender opsiyonel. Panel varsayılanı SMSPANEL zorlanmaz.
+        if ($usesTexcell) {
+            if ($requested === '' || strcasecmp($requested, 'SMSPANEL') === 0) {
+                return trim((string) ($this->defaultProviderSenderId() ?? ''));
+            }
+
+            return $requested;
+        }
+
+        return $requested !== ''
+            ? $requested
+            : (string) (
+                $user->organization?->sms_sender_id
+                ?? $user->sms_sender_id
+                ?? $this->defaultProviderSenderId()
+                ?? config('sms.default_sender_id')
+                ?? ''
+            );
+    }
+
+    private function defaultProviderIsTexcell(): bool
+    {
+        $provider = $this->smsProviderRepository->findDefaultActive();
+
+        return $provider?->driver === \App\Enums\SmsProviderDriver::Texcell
+            || ($provider === null && config('sms.default_provider') === 'texcell');
     }
 
     private function defaultProviderSenderId(): ?string

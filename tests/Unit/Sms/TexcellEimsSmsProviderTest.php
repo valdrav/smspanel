@@ -36,21 +36,63 @@ class TexcellEimsSmsProviderTest extends TestCase
         $this->assertTrue($result->success);
         $this->assertSame('42', $result->messageId);
 
+        $recorded = Http::recorded();
+        $this->assertCount(1, $recorded);
+        [$request] = $recorded[0];
+        $data = json_decode($request->body(), true);
+        $this->assertIsArray($data);
+        $this->assertSame('CTU780', $data['account'] ?? null);
+        $this->assertSame('905551234567', $data['numbers'] ?? null);
+        $this->assertSame('Merhaba', $data['content'] ?? null);
+        $this->assertSame(0, (int) ($data['smstype'] ?? -1));
+        $this->assertSame('TEST', $data['sender'] ?? null);
+    }
+
+    public function test_send_omits_default_smspanel_sender(): void
+    {
+        Http::fake([
+            '*/sendsms' => Http::response([
+                'status' => 0,
+                'success' => 1,
+                'fail' => 0,
+                'array' => [[905551234567, 42]],
+            ], 200),
+        ]);
+
+        $provider = new TexcellEimsSmsProvider([
+            'account' => 'CTU780',
+            'password' => 'secret',
+            'base_url' => 'http://38.150.64.36:20003',
+            'sender' => 'SMSPANEL',
+        ]);
+
+        $result = $provider->send(new SmsSendRequest(
+            to: '5551234567',
+            message: 'Merhaba',
+            senderId: 'SMSPANEL',
+        ));
+
+        $this->assertTrue($result->success);
+
         Http::assertSent(function ($request) {
-            $data = $request->data();
+            $data = json_decode($request->body(), true);
 
             return $request->url() === 'http://38.150.64.36:20003/sendsms'
+                && is_array($data)
                 && ($data['account'] ?? null) === 'CTU780'
                 && ($data['numbers'] ?? null) === '905551234567'
-                && ($data['content'] ?? null) === 'Merhaba'
-                && ($data['smstype'] ?? null) === 0;
+                && ! array_key_exists('sender', $data);
         });
     }
 
     public function test_send_maps_auth_error(): void
     {
         Http::fake([
-            '*/sendsms' => Http::response(['status' => -1], 200),
+            '*/sendsms' => Http::response([
+                'status' => -1,
+                'desc' => 'Authentication failure',
+                'reason' => 'Authentication failure',
+            ], 200),
         ]);
 
         $provider = new TexcellEimsSmsProvider([
@@ -63,6 +105,7 @@ class TexcellEimsSmsProviderTest extends TestCase
 
         $this->assertFalse($result->success);
         $this->assertStringContainsString('Kimlik doğrulama', (string) $result->errorMessage);
+        $this->assertStringContainsString('Authentication failure', (string) $result->errorMessage);
     }
 
     public function test_get_balance_sums_gift(): void

@@ -153,8 +153,7 @@ class SmsSendTest extends TestCase
         $this->assertEquals(40, (float) $this->user->fresh()->sms_balance);
 
         Http::assertSent(fn (Request $request): bool => str_contains($request->url(), '/sendsms')
-            && ($request['account'] ?? null) === 'CTU780'
-            && ($request['sender'] ?? null) === 'INOVAPP'
-            && count(explode(',', (string) ($request['numbers'] ?? ''))) === 30);
+            && data_get(json_decode($request->body(), true), 'account') === 'CTU780'
+            && count(explode(',', (string) data_get(json_decode($request->body(), true), 'numbers'))) === 30);
     }
 }

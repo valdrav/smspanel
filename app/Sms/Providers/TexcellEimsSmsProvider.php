@@ -6,14 +6,16 @@ use App\Sms\DTOs\SmsBalanceResult;
 use App\Sms\DTOs\SmsSendRequest;
 use App\Sms\DTOs\SmsSendResult;
 use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 /**
  * Texcell / EJOIN EIMS HTTP API v3.5 entegrasyonu.
  *
- * Endpoints: /getbalance, /sendsms, /getreport, /getsms, /smsjob
- * Kimlik: account + password (şifreleme açıksa MD5).
+ * PDF: sender opsiyonel; Content-Type application/json;charset=utf-8;
+ * POST /sendsms body JSON; GET /getbalance?account=&password=
+ * Charge Rule: Send billing.
  *
  * @see TEXCELL EIMS HTTP API_V3.5 EN.pdf
  */
@@ -21,7 +23,6 @@ class TexcellEimsSmsProvider extends AbstractSmsProvider
 {
     private const DEFAULT_BASE_URL = 'http://38.150.64.36:20003';
 
-    /** POST ile tek istekte en fazla 10000 numara; panel batch'i 30 olduğu için güvenli üst sınır. */
     private const MAX_RECIPIENTS_PER_REQUEST = 500;
 
     private const MAX_REPORT_IDS = 200;
@@ -39,8 +40,6 @@ class TexcellEimsSmsProvider extends AbstractSmsProvider
     }
 
     /**
-     * Aynı metin + gönderici için numaraları gruplayıp POST /sendsms ile gönderir.
-     *
      * @param  list<SmsSendRequest>  $requests
      * @return list<SmsSendResult>
      */
@@ -52,7 +51,7 @@ class TexcellEimsSmsProvider extends AbstractSmsProvider
 
         if ($this->account() === '' || $this->password() === '') {
             return array_map(
-                fn () => $this->failure('Texcell hesap adı veya şifre yapılandırılmamış.'),
+                fn () => $this->failure('Texcell account/password yapılandırılmamış. SMS Sağlayıcılar → Texcell kaydına girin.'),
                 $requests
             );
         }
@@ -99,22 +98,18 @@ class TexcellEimsSmsProvider extends AbstractSmsProvider
         if ($this->account() === '' || $this->password() === '') {
             return new SmsBalanceResult(
                 success: false,
-                errorMessage: 'Texcell hesap adı veya şifre yapılandırılmamış.',
+                errorMessage: 'Texcell account/password yapılandırılmamış.',
             );
         }
 
         try {
-            $response = Http::timeout(30)
-                ->acceptJson()
-                ->withHeaders(['Content-Type' => 'application/json;charset=utf-8'])
-                ->get($this->endpoint('getbalance'), $this->authQuery());
+            $response = $this->http()->get($this->endpoint('getbalance'), $this->authParams());
+            $data = $this->json($response);
 
-            $data = $response->json();
-
-            if (! $response->successful() || ! is_array($data)) {
+            if ($data === null) {
                 return new SmsBalanceResult(
                     success: false,
-                    errorMessage: "Texcell bakiye HTTP hatası: {$response->status()}",
+                    errorMessage: "Texcell bakiye HTTP hatası: {$response->status()} — ".$response->body(),
                 );
             }
 
@@ -123,7 +118,7 @@ class TexcellEimsSmsProvider extends AbstractSmsProvider
             if ($status !== 0) {
                 return new SmsBalanceResult(
                     success: false,
-                    errorMessage: $this->statusMessage($status),
+                    errorMessage: $this->apiErrorMessage($status, $data),
                 );
             }
 
@@ -157,10 +152,8 @@ class TexcellEimsSmsProvider extends AbstractSmsProvider
     }
 
     /**
-     * Birden fazla gönderim ID'si için /getreport sorgular (en fazla 200).
-     *
      * @param  list<string|int>  $ids
-     * @return array<string, SmsSendResult> messageId => result
+     * @return array<string, SmsSendResult>
      */
     public function getReports(array $ids): array
     {
@@ -169,11 +162,7 @@ class TexcellEimsSmsProvider extends AbstractSmsProvider
             $ids
         ), static fn (string $id): bool => $id !== '')));
 
-        if ($ids === []) {
-            return [];
-        }
-
-        if ($this->account() === '' || $this->password() === '') {
+        if ($ids === [] || $this->account() === '' || $this->password() === '') {
             return [];
         }
 
@@ -181,34 +170,21 @@ class TexcellEimsSmsProvider extends AbstractSmsProvider
 
         foreach (array_chunk($ids, self::MAX_REPORT_IDS) as $chunk) {
             try {
-                $response = Http::timeout(30)
-                    ->acceptJson()
-                    ->withHeaders(['Content-Type' => 'application/json;charset=utf-8'])
-                    ->get($this->endpoint('getreport'), array_merge($this->authQuery(), [
-                        'ids' => implode(',', $chunk),
-                    ]));
+                $response = $this->http()->get($this->endpoint('getreport'), array_merge($this->authParams(), [
+                    'ids' => implode(',', $chunk),
+                ]));
+                $data = $this->json($response);
 
-                $data = $response->json();
-
-                if (! $response->successful() || ! is_array($data) || (int) ($data['status'] ?? -1) !== 0) {
-                    Log::warning('Texcell getreport başarısız', [
-                        'status' => is_array($data) ? ($data['status'] ?? null) : null,
-                        'http' => $response->status(),
-                    ]);
-
+                if ($data === null || (int) ($data['status'] ?? -1) !== 0) {
                     continue;
                 }
 
-                $rows = is_array($data['array'] ?? null) ? $data['array'] : [];
-
-                foreach ($rows as $row) {
+                foreach ((array) ($data['array'] ?? []) as $row) {
                     if (! is_array($row) || count($row) < 4) {
                         continue;
                     }
-
                     $id = (string) $row[0];
-                    $code = (int) $row[3];
-                    $out[$id] = $this->mapReportStatus($id, $code);
+                    $out[$id] = $this->mapReportStatus($id, (int) $row[3]);
                 }
             } catch (\Throwable $exception) {
                 Log::error('Texcell getreport hatası', ['message' => $exception->getMessage()]);
@@ -216,62 +192,6 @@ class TexcellEimsSmsProvider extends AbstractSmsProvider
         }
 
         return $out;
-    }
-
-    /**
-     * Gelen SMS'leri çeker (/getsms). İçerik base64 + utf-8.
-     *
-     * @return list<array{id: string, number: string, time: string, content: string}>
-     */
-    public function fetchInboundSms(?int $startTime = null): array
-    {
-        if ($this->account() === '' || $this->password() === '') {
-            return [];
-        }
-
-        try {
-            $query = $this->authQuery();
-            if ($startTime !== null) {
-                $query['start_time'] = $startTime;
-            }
-
-            $response = Http::timeout(30)
-                ->acceptJson()
-                ->withHeaders(['Content-Type' => 'application/json;charset=utf-8'])
-                ->get($this->endpoint('getsms'), $query);
-
-            $data = $response->json();
-
-            if (! $response->successful() || ! is_array($data) || (int) ($data['status'] ?? -1) !== 0) {
-                return [];
-            }
-
-            $rows = is_array($data['array'] ?? null) ? $data['array'] : [];
-            $messages = [];
-
-            foreach ($rows as $row) {
-                if (! is_array($row) || count($row) < 4) {
-                    continue;
-                }
-
-                $encoded = (string) $row[3];
-                $decoded = base64_decode($encoded, true);
-                $content = $decoded !== false ? $decoded : $encoded;
-
-                $messages[] = [
-                    'id' => (string) $row[0],
-                    'number' => (string) $row[1],
-                    'time' => (string) $row[2],
-                    'content' => mb_convert_encoding($content, 'UTF-8', 'UTF-8'),
-                ];
-            }
-
-            return $messages;
-        } catch (\Throwable $exception) {
-            Log::error('Texcell getsms hatası', ['message' => $exception->getMessage()]);
-
-            return [];
-        }
     }
 
     /**
@@ -302,27 +222,28 @@ class TexcellEimsSmsProvider extends AbstractSmsProvider
             );
         }
 
-        $payload = array_merge($this->authBody(), [
+        // PDF POST body örneği: account, password, content, smstype, numbers — sender opsiyonel.
+        $payload = array_merge($this->authParams(), [
             'smstype' => 0,
             'numbers' => implode(',', $uniqueNumbers),
             'content' => $message,
         ]);
 
+        // Yalnızca Texcell panelinde tanımlı gönderici varsa gönder; SMSPANEL vb. uydurma başlık gönderme.
         if ($sender !== '') {
             $payload['sender'] = $sender;
         }
 
         try {
-            $response = Http::timeout(45)
-                ->acceptJson()
-                ->asJson()
-                ->withHeaders(['Content-Type' => 'application/json;charset=utf-8'])
-                ->post($this->endpoint('sendsms'), $payload);
+            $response = $this->http()
+                ->timeout(45)
+                ->withBody(json_encode($payload, JSON_UNESCAPED_UNICODE), 'application/json;charset=utf-8')
+                ->post($this->endpoint('sendsms'));
 
-            $data = $response->json();
+            $data = $this->json($response);
 
-            if (! is_array($data)) {
-                $failure = $this->failure("Texcell HTTP hatası: {$response->status()}");
+            if ($data === null) {
+                $failure = $this->failure("Texcell HTTP hatası: {$response->status()} — ".$response->body());
 
                 return array_fill(0, count($requests), $failure);
             }
@@ -330,25 +251,39 @@ class TexcellEimsSmsProvider extends AbstractSmsProvider
             $status = (int) ($data['status'] ?? -99);
 
             if ($status !== 0) {
-                $failure = $this->failure($this->statusMessage($status));
+                Log::warning('Texcell sendsms reddedildi', [
+                    'status' => $status,
+                    'response' => $data,
+                    'account' => $this->account(),
+                    'numbers' => $uniqueNumbers,
+                    'has_sender' => $sender !== '',
+                ]);
+
+                $failure = $this->failure($this->apiErrorMessage($status, $data));
 
                 return array_fill(0, count($requests), $failure);
             }
 
-            $resultByUniqueIndex = [];
-            $rows = is_array($data['array'] ?? null) ? $data['array'] : [];
-
-            // array: [[number, id], ...]
             $idByNumber = [];
-            foreach ($rows as $row) {
+            foreach ((array) ($data['array'] ?? []) as $row) {
                 if (! is_array($row) || count($row) < 2) {
                     continue;
                 }
-                $idByNumber[(string) $row[0]] = (string) $row[1];
+                $idByNumber[$this->digits((string) $row[0])] = (string) $row[1];
             }
 
+            $resultByUniqueIndex = [];
             foreach ($uniqueNumbers as $index => $number) {
-                if (! isset($idByNumber[$number])) {
+                $messageId = $this->matchMessageId($number, $idByNumber);
+
+                if ($messageId === null) {
+                    // status=0 ama eşleşme yoksa yine başarılı say (PDF: success sayacı)
+                    if ((int) ($data['success'] ?? 0) > 0 && $idByNumber !== []) {
+                        $messageId = (string) reset($idByNumber);
+                    }
+                }
+
+                if ($messageId === null) {
                     $resultByUniqueIndex[$index] = $this->failure('Texcell: Numara gönderim yanıtında yok.');
 
                     continue;
@@ -356,12 +291,12 @@ class TexcellEimsSmsProvider extends AbstractSmsProvider
 
                 $resultByUniqueIndex[$index] = new SmsSendResult(
                     success: true,
-                    messageId: $idByNumber[$number],
+                    messageId: $messageId,
                     status: 'sent',
                 );
             }
 
-            return array_map(function (SmsSendRequest $request, int $offset) use ($numbers, $uniqueIndexByNumber, $resultByUniqueIndex): SmsSendResult {
+            return array_map(function (int $offset) use ($numbers, $uniqueIndexByNumber, $resultByUniqueIndex): SmsSendResult {
                 $number = $numbers[$offset];
 
                 if ($number === '' || ! isset($uniqueIndexByNumber[$number])) {
@@ -370,7 +305,7 @@ class TexcellEimsSmsProvider extends AbstractSmsProvider
 
                 return $resultByUniqueIndex[$uniqueIndexByNumber[$number]]
                     ?? $this->failure('Texcell: Gönderim yanıtı eksik.');
-            }, $requests, array_keys($requests));
+            }, array_keys($requests));
         } catch (ConnectionException $exception) {
             Log::error('Texcell bağlantı hatası', ['message' => $exception->getMessage()]);
             $failure = $this->failure('Texcell bağlantı hatası: '.$exception->getMessage());
@@ -384,9 +319,28 @@ class TexcellEimsSmsProvider extends AbstractSmsProvider
         }
     }
 
+    /**
+     * @param  array<string, string>  $idByNumber
+     */
+    private function matchMessageId(string $number, array $idByNumber): ?string
+    {
+        $digits = $this->digits($number);
+
+        if (isset($idByNumber[$digits])) {
+            return $idByNumber[$digits];
+        }
+
+        foreach ($idByNumber as $returned => $id) {
+            if ($returned === $digits || str_ends_with($digits, $returned) || str_ends_with($returned, $digits)) {
+                return $id;
+            }
+        }
+
+        return null;
+    }
+
     private function mapReportStatus(string $messageId, int $code): SmsSendResult
     {
-        // Send: 0 success, 1 unsent, 2 sending; Deliver: 3 success, 2 fail, 4 timeout
         return match (true) {
             $code === 0, $code === 3 => new SmsSendResult(
                 success: true,
@@ -418,30 +372,33 @@ class TexcellEimsSmsProvider extends AbstractSmsProvider
             1005 => 'Texcell: Gönderim reddedildi',
             1006 => 'Texcell: Gönderim zaman aşımı',
             1007 => 'Texcell: Sunucu zaman aşımı',
-            1008 => 'Texcell: Supplier MCC/MNC limiti',
-            1009 => 'Texcell: Consumer MCC/MNC limiti',
-            1010 => 'Texcell: Tedarikçi yok',
             1011 => 'Texcell: Kara liste numarası',
             1012 => 'Texcell: Hassas kelime',
             1013 => 'Texcell: Günlük limit',
-            1014 => 'Texcell: Destination MCC/MNC limiti',
-            1016 => 'Texcell: SMS şablon limiti',
-            1017 => 'Texcell: Tedarikçi bakiyesi yetersiz',
-            1018 => 'Texcell: Kullanıcı kâr limiti',
-            1019 => 'Texcell: Kanal kâr limiti',
-            1020 => 'Texcell: MCC numara uzunluk limiti',
-            1021 => 'Texcell: Job bulunamadı',
-            1022 => 'Texcell: Çin SMS limiti',
-            1023 => 'Texcell: Route MCC/MNC limiti',
             default => "Texcell rapor hata kodu: {$code}",
         };
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    private function apiErrorMessage(int $status, array $data): string
+    {
+        $detail = trim((string) ($data['reason'] ?? $data['desc'] ?? $data['message'] ?? ''));
+        $base = $this->statusMessage($status);
+
+        if ($detail !== '' && ! str_contains(strtolower($base), strtolower($detail))) {
+            return "{$base} ({$detail})";
+        }
+
+        return $base;
     }
 
     private function statusMessage(int $status): string
     {
         return match ($status) {
-            -1 => 'Texcell: Kimlik doğrulama hatası.',
-            -2 => 'Texcell: IP erişim kısıtı (whitelist).',
+            -1 => 'Texcell: Kimlik doğrulama hatası — account/password veya IP whitelist kontrol edin.',
+            -2 => 'Texcell: IP erişim kısıtı (sunucu IP’nizi whitelist’e ekleyin).',
             -3 => 'Texcell: Mesaj hassas karakter içeriyor.',
             -4 => 'Texcell: Mesaj içeriği boş.',
             -5 => 'Texcell: Mesaj çok uzun.',
@@ -453,10 +410,6 @@ class TexcellEimsSmsProvider extends AbstractSmsProvider
             -11 => 'Texcell: Zamanlama hatalı.',
             -12 => 'Texcell: Platform toplu gönderim hatası.',
             -13 => 'Texcell: Kullanıcı kilitli.',
-            -14 => 'Texcell: Numara kaynağı hatalı.',
-            -15 => 'Texcell: Görev adı hatalı.',
-            -16 => 'Texcell: Görev tipi hatalı.',
-            -17 => 'Texcell: Diğer hata.',
             default => "Texcell hata kodu: {$status}",
         };
     }
@@ -464,48 +417,33 @@ class TexcellEimsSmsProvider extends AbstractSmsProvider
     /**
      * @return array<string, mixed>
      */
-    private function authQuery(): array
+    private function authParams(): array
     {
-        $query = [
+        $params = [
             'account' => $this->account(),
-            'password' => $this->resolvedPassword(),
-            'version' => $this->config('version', '1.0'),
+            'password' => $this->password(),
+            'version' => (string) $this->config('version', '1.0'),
         ];
 
         if ($this->encryptionEnabled()) {
-            $query['seq'] = $this->nextSeq();
-            $query['time'] = time();
-            $query['password'] = $this->encryptedPassword((int) $query['seq'], (int) $query['time']);
+            $seq = max(1, (int) $this->config('seq', 1));
+            $time = time();
+            $params['seq'] = $seq;
+            $params['time'] = $time;
+            $params['password'] = md5($this->account().$this->password().$seq.$time.$this->encryptionKey());
         }
 
-        return $query;
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function authBody(): array
-    {
-        return $this->authQuery();
+        return $params;
     }
 
     private function encryptionEnabled(): bool
     {
-        return trim((string) $this->config('encryption_key', config('sms.texcell.encryption_key'))) !== '';
+        return $this->encryptionKey() !== '';
     }
 
-    private function encryptedPassword(int $seq, int $time): string
+    private function encryptionKey(): string
     {
-        $key = trim((string) $this->config('encryption_key', config('sms.texcell.encryption_key')));
-
-        return md5($this->account().$this->password().$seq.$time.$key);
-    }
-
-    private function nextSeq(): int
-    {
-        $seq = (int) $this->config('seq', 1);
-
-        return max(1, $seq);
+        return trim((string) $this->config('encryption_key', config('sms.texcell.encryption_key')));
     }
 
     private function account(): string
@@ -518,20 +456,32 @@ class TexcellEimsSmsProvider extends AbstractSmsProvider
         return (string) $this->config('password', config('sms.texcell.password'));
     }
 
-    private function resolvedPassword(): string
-    {
-        return $this->password();
-    }
-
+    /**
+     * PDF: sender N (opsiyonel). Panel SMSPANEL’ini Texcell’e göndermeyiz.
+     * Yalnızca istekte veya Texcell config.sender doluysa kullanılır.
+     */
     private function resolveSender(?string $senderId): string
     {
-        return trim((string) ($senderId ?: $this->config('sender', config('sms.texcell.sender', ''))));
+        $fromRequest = trim((string) ($senderId ?? ''));
+        $configured = trim((string) $this->config('sender', config('sms.texcell.sender', '')));
+
+        // Panel varsayılanı SMSPANEL ise Texcell hesabına zorla gönderme.
+        $ignored = ['SMSPANEL', 'smspanel'];
+
+        if ($fromRequest !== '' && ! in_array($fromRequest, $ignored, true)) {
+            return $fromRequest;
+        }
+
+        if ($configured !== '' && ! in_array($configured, $ignored, true)) {
+            return $configured;
+        }
+
+        return '';
     }
 
     private function endpoint(string $path): string
     {
         $base = trim((string) $this->config('base_url', config('sms.texcell.base_url', self::DEFAULT_BASE_URL)));
-
         if ($base === '') {
             $base = self::DEFAULT_BASE_URL;
         }
@@ -539,12 +489,28 @@ class TexcellEimsSmsProvider extends AbstractSmsProvider
         return rtrim($base, '/').'/'.ltrim($path, '/');
     }
 
+    private function http(): \Illuminate\Http\Client\PendingRequest
+    {
+        return Http::timeout(30)
+            ->acceptJson()
+            ->withHeaders([
+                'Content-Type' => 'application/json;charset=utf-8',
+            ]);
+    }
+
     /**
-     * Uluslararası format: 905XXXXXXXXX (+ / 00 olmadan).
+     * @return array<string, mixed>|null
      */
+    private function json(Response $response): ?array
+    {
+        $data = $response->json();
+
+        return is_array($data) ? $data : null;
+    }
+
     private function internationalNumber(string $phone): string
     {
-        $digits = preg_replace('/\D+/', '', $phone) ?? '';
+        $digits = $this->digits($phone);
 
         if ($digits === '') {
             return '';
@@ -558,11 +524,16 @@ class TexcellEimsSmsProvider extends AbstractSmsProvider
             return '90'.$digits;
         }
 
-        if (strlen($digits) === 11 && str_starts_with($digits, '0') && str_starts_with(substr($digits, 1), '5')) {
+        if (strlen($digits) === 11 && str_starts_with($digits, '05')) {
             return '90'.substr($digits, 1);
         }
 
         return $digits;
+    }
+
+    private function digits(string $value): string
+    {
+        return preg_replace('/\D+/', '', $value) ?? '';
     }
 
     private function failure(string $message): SmsSendResult
