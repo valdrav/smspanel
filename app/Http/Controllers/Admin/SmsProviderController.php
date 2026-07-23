@@ -85,7 +85,10 @@ class SmsProviderController extends Controller
         $result = $this->smsProviderService->testBalance($smsProvider);
 
         if ($result->success) {
-            return back()->with('success', 'Sağlayıcı bakiyesi sorgulandı: '.number_format($result->balance, 0, ',', '.').' SMS');
+            return back()->with('success', 'Sağlayıcı bakiyesi sorgulandı: '.number_format($result->balance, 0, ',', '.').' SMS'
+                .($smsProvider->driver === \App\Enums\SmsProviderDriver::Texcell
+                    ? ' (ana kullanıcı SMS hakkına senkronlandı)'
+                    : ''));
         }
 
         return back()->with('error', $result->errorMessage ?? 'Bakiye sorgulanamadı.');

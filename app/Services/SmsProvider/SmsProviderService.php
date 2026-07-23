@@ -6,11 +6,13 @@ use App\DTOs\ActivityLog\CreateActivityLogData;
 use App\DTOs\SmsProvider\CreateSmsProviderData;
 use App\DTOs\SmsProvider\UpdateSmsProviderData;
 use App\Enums\ActivityAction;
+use App\Enums\SmsProviderDriver;
 use App\Exceptions\BusinessException;
 use App\Models\SmsProvider;
 use App\Repositories\Contracts\SmsProviderRepositoryInterface;
 use App\Services\Contracts\ActivityLogServiceInterface;
 use App\Services\Contracts\SmsProviderServiceInterface;
+use App\Services\Sms\TexcellBalanceSyncService;
 use App\Sms\DTOs\SmsBalanceResult;
 use App\Sms\SmsProviderFactory;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
@@ -26,6 +28,7 @@ class SmsProviderService implements SmsProviderServiceInterface
         private readonly SmsProviderRepositoryInterface $smsProviderRepository,
         private readonly SmsProviderFactory $smsProviderFactory,
         private readonly ActivityLogServiceInterface $activityLogService,
+        private readonly TexcellBalanceSyncService $texcellBalanceSyncService,
     ) {}
 
     public function list(array $filters = [], int $perPage = 15): LengthAwarePaginator
@@ -112,6 +115,13 @@ class SmsProviderService implements SmsProviderServiceInterface
                 success: false,
                 errorMessage: 'Bu sağlayıcının sürücüsü artık desteklenmiyor. Kaydı silip Texcell ekleyin.',
             );
+        }
+
+        if (
+            $provider->driver === SmsProviderDriver::Texcell
+            && filter_var(config('sms.texcell.sync_balance_to_admin', true), FILTER_VALIDATE_BOOL)
+        ) {
+            return $this->texcellBalanceSyncService->syncProvider($provider);
         }
 
         $instance = $this->smsProviderFactory->makeFromModel($provider);

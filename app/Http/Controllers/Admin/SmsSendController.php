@@ -5,15 +5,18 @@ namespace App\Http\Controllers\Admin;
 use App\DTOs\Sms\SendBulkSmsData;
 use App\DTOs\Sms\SendSmsData;
 use App\Enums\SmsMessageStatus;
+use App\Enums\SmsProviderDriver;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Sms\SendBulkSmsRequest;
 use App\Http\Requests\Sms\SendSmsRequest;
 use App\Models\SmsMessage;
+use App\Repositories\Contracts\SmsProviderRepositoryInterface;
 use App\Services\Contact\ContactService;
 use App\Services\Contracts\SmsSendServiceInterface;
 use App\Services\Contracts\UserSenderNumberServiceInterface;
 use App\Services\Contracts\WalletServiceInterface;
 use App\Services\Sms\SmsTemplateService;
+use App\Services\Sms\TexcellBalanceSyncService;
 use App\Sms\Support\PhoneNormalizer;
 use App\Sms\Support\SmsSegmentCalculator;
 use Illuminate\Http\JsonResponse;
@@ -32,6 +35,8 @@ class SmsSendController extends Controller
         private readonly SmsTemplateService $smsTemplateService,
         private readonly SmsSegmentCalculator $segmentCalculator,
         private readonly PhoneNormalizer $phoneNormalizer,
+        private readonly SmsProviderRepositoryInterface $smsProviderRepository,
+        private readonly TexcellBalanceSyncService $texcellBalanceSyncService,
     ) {}
 
     public function create(): View
@@ -44,10 +49,19 @@ class SmsSendController extends Controller
             ?? $senderNumbers->first()?->sender_id
             ?? $this->userSenderNumberService->resolveSenderId($user, null);
 
-        $balance = $this->walletService->getAvailableBalance($user);
-        $defaultProvider = app(\App\Repositories\Contracts\SmsProviderRepositoryInterface::class)->findDefaultActive();
-        $defaultProviderIsTexcell = $defaultProvider?->driver === \App\Enums\SmsProviderDriver::Texcell
+        $defaultProvider = $this->smsProviderRepository->findDefaultActive();
+        $defaultProviderIsTexcell = $defaultProvider?->driver === SmsProviderDriver::Texcell
             || ($defaultProvider === null && config('sms.default_provider') === 'texcell');
+
+        if (
+            $defaultProviderIsTexcell
+            && filter_var(config('sms.texcell.sync_balance_to_admin', true), FILTER_VALIDATE_BOOL)
+        ) {
+            $this->texcellBalanceSyncService->syncDefault($user);
+            $user->refresh();
+        }
+
+        $balance = $this->walletService->getAvailableBalance($user);
 
         return view('admin.sms.send', [
             'pageTitle' => 'SMS Gönder',

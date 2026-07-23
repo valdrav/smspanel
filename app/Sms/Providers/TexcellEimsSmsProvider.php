@@ -103,7 +103,10 @@ class TexcellEimsSmsProvider extends AbstractSmsProvider
         }
 
         try {
-            $response = $this->http()->get($this->endpoint('getbalance'), $this->authParams());
+            // PDF: GET /getbalance?account=***&password=*** (body yok, Content-Type gerekmez)
+            $response = Http::timeout(30)
+                ->acceptJson()
+                ->get($this->endpoint('getbalance'), $this->authParams());
             $data = $this->json($response);
 
             if ($data === null) {
@@ -170,9 +173,11 @@ class TexcellEimsSmsProvider extends AbstractSmsProvider
 
         foreach (array_chunk($ids, self::MAX_REPORT_IDS) as $chunk) {
             try {
-                $response = $this->http()->get($this->endpoint('getreport'), array_merge($this->authParams(), [
-                    'ids' => implode(',', $chunk),
-                ]));
+                $response = Http::timeout(30)
+                    ->acceptJson()
+                    ->get($this->endpoint('getreport'), array_merge($this->authParams(), [
+                        'ids' => implode(',', $chunk),
+                    ]));
                 $data = $this->json($response);
 
                 if ($data === null || (int) ($data['status'] ?? -1) !== 0) {
@@ -235,8 +240,8 @@ class TexcellEimsSmsProvider extends AbstractSmsProvider
         }
 
         try {
-            $response = $this->http()
-                ->timeout(45)
+            $response = Http::timeout(45)
+                ->acceptJson()
                 ->withBody(json_encode($payload, JSON_UNESCAPED_UNICODE), 'application/json;charset=utf-8')
                 ->post($this->endpoint('sendsms'));
 
@@ -419,10 +424,10 @@ class TexcellEimsSmsProvider extends AbstractSmsProvider
      */
     private function authParams(): array
     {
+        // PDF zorunlu: account + password. version opsiyonel (default 1.0) — göndermiyoruz.
         $params = [
             'account' => $this->account(),
             'password' => $this->password(),
-            'version' => (string) $this->config('version', '1.0'),
         ];
 
         if ($this->encryptionEnabled()) {
@@ -453,7 +458,7 @@ class TexcellEimsSmsProvider extends AbstractSmsProvider
 
     private function password(): string
     {
-        return (string) $this->config('password', config('sms.texcell.password'));
+        return trim((string) $this->config('password', config('sms.texcell.password')));
     }
 
     /**
@@ -487,15 +492,6 @@ class TexcellEimsSmsProvider extends AbstractSmsProvider
         }
 
         return rtrim($base, '/').'/'.ltrim($path, '/');
-    }
-
-    private function http(): \Illuminate\Http\Client\PendingRequest
-    {
-        return Http::timeout(30)
-            ->acceptJson()
-            ->withHeaders([
-                'Content-Type' => 'application/json;charset=utf-8',
-            ]);
     }
 
     /**

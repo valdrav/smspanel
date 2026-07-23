@@ -28,7 +28,7 @@ return [
     |--------------------------------------------------------------------------
     |
     | Charge Rule: Send billing (gönderim anında ücretlendirme).
-    | Base: http://IP:20003
+    | Base: http://IP:20003  (getbalance / sendsms)
     | sender PDF'de opsiyonel — boş bırakılırsa API'ye gönderilmez.
     |
     */
@@ -41,6 +41,7 @@ return [
         'encryption_key' => env('TEXCELL_ENCRYPTION_KEY'),
         'webhook_token' => env('TEXCELL_WEBHOOK_TOKEN'),
         'provider_code' => env('TEXCELL_PROVIDER_CODE', 'texcell'),
+        'sync_balance_to_admin' => env('TEXCELL_SYNC_BALANCE_TO_ADMIN', true),
     ],
 
     /*
